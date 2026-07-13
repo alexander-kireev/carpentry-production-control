@@ -24,7 +24,7 @@ Do not implement:
 - automatic schedule optimisation or auto-rescheduling;
 - separate branching rework jobs;
 - dedicated QC software role;
-- procurement or purchase-order workflows;
+- auto-calculate or Order-integrated procurement workflows (limited manual purchase orders with simulated arrival ARE in MVP scope — see Stage 11 development_strategy.md in the planning repo);
 - customer-facing portal, booking flow, or payment flow;
 - backup management console, backup browser, or arbitrary backup file downloads;
 - cloud backup, point-in-time recovery, WAL archiving, or event replay restore;
