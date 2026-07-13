@@ -1,0 +1,23 @@
+[project]
+name = "carpentry-production-control"
+version = "0.1.0"
+description = "Carpentry Workshop Production-Control System"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["migrations", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# The settings split intentionally re-exports base via `import *`.
+"config/settings/*.py" = ["F403", "F405"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py", "*_test.py"]
+pythonpath = ["."]
+addopts = "-ra"

@@ -4,7 +4,7 @@
 
 This is a Django/PostgreSQL production-control system for a small carpentry workshop. It is a portfolio backend project.
 
-The system manages workshop orders, jobs, operation routes, material reservation, scheduling, blockers, QC, rework, analytics, Demo Mode, and backup. It is not a generic ERP, a marketplace, a booking platform, or a customer-facing product.
+The system manages workshop orders, jobs, operation routes, material reservation, scheduling, blockers, analytics, and backup. It is not a generic ERP, a marketplace, a booking platform, or a customer-facing product. (QC/rework and Demo Mode are post-MVP — see the planning repo's post_mvp_backlog.md.)
 
 ## Technical Stack
 
@@ -30,7 +30,7 @@ Do not implement:
 - cloud backup, point-in-time recovery, WAL archiving, or event replay restore;
 - advanced BI, custom report builder, or scheduled reports;
 - Demo Mode auto-play;
-- configurable permission system beyond the three approved roles (Admin, Manager, Operator);
+- configurable permission system beyond the four approved account roles (admin, manager, operator, technician);
 - visual route builder or configurable transition graphs;
 - attachment-based messaging;
 - financial downtime costing or employee productivity scoring.

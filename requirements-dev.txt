@@ -1,0 +1,7 @@
+# Development + CI dependencies. Includes the runtime set.
+-r requirements.txt
+
+ruff==0.15.21
+pytest==9.1.1
+pytest-django==4.12.0
+factory_boy==3.3.3

@@ -1,0 +1,4 @@
+# Runtime dependencies (pinned). Dev/test tooling lives in requirements-dev.txt.
+Django==5.2.16
+psycopg[binary]==3.3.4
+python-dotenv==1.2.2
