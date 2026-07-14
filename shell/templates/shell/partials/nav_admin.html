@@ -1,0 +1,12 @@
+{# Admin nav (S1). Dashboard is live; other destinations are ported by S2. #}
+<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'admin_dashboard' %} active{% endif %}"
+       href="{% url 'admin_dashboard' %}">Dashboard</a>
+  </li>
+  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">My Work</a></li>
+  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Workshop</a></li>
+  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Business</a></li>
+  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Messages</a></li>
+  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Notifications</a></li>
+</ul>

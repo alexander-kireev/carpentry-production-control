@@ -1,10 +1,111 @@
-/* Base stylesheet (F2). Small project-level overrides on top of Bootstrap 5.
-   Role-specific styling arrives with later slices. */
+/* ============================================================================
+   Shared stylesheet (S1). Plain CSS on top of Bootstrap 5.3 — no Sass, no build.
+   Two jobs:
+     1. THEME — override Bootstrap `--bs-*` vars (and a few `--app-*` props) so a
+        rebrand is a variable edit, not a template sweep.
+     2. COMPONENTS — semantic classes for recurring chrome (page header, panel,
+        app navbar). House rule: recurring + meaningful -> semantic class here;
+        one-off spacing/alignment -> inline Bootstrap utility is fine. Do NOT add
+        classes for feature interiors that don't exist yet — each slice adds its
+        own when it builds the real interior.
+   ============================================================================ */
 
+/* ---------------------------------------------------------------------------
+   1. Theme — edit these to rebrand.
+   --------------------------------------------------------------------------- */
+:root {
+  /* Accent — the single brand colour the chrome derives from. */
+  --app-accent: #2f5d50;
+  --app-accent-hover: #244a40;
+
+  /* Bootstrap globals routed through the theme. */
+  --bs-body-bg: #f7f6f4;
+  --bs-body-color: #23262b;
+  --bs-border-color: #dcd8d2;
+  --bs-link-color: var(--app-accent);
+  --bs-link-hover-color: var(--app-accent-hover);
+
+  /* App chrome props consumed by the component classes below. */
+  --app-navbar-bg: #23262b;
+  --app-panel-bg: #ffffff;
+  --app-panel-radius: 0.5rem;
+}
+
+/* Bootstrap 5.3 button vars are set literally per-variant and don't inherit
+   `--bs-primary` at runtime, so route the primary button through the accent
+   explicitly — keeps "rebrand = variable edit" true for real components. */
+.btn-primary {
+  --bs-btn-bg: var(--app-accent);
+  --bs-btn-border-color: var(--app-accent);
+  --bs-btn-hover-bg: var(--app-accent-hover);
+  --bs-btn-hover-border-color: var(--app-accent-hover);
+  --bs-btn-active-bg: var(--app-accent-hover);
+  --bs-btn-active-border-color: var(--app-accent-hover);
+  --bs-btn-disabled-bg: var(--app-accent);
+  --bs-btn-disabled-border-color: var(--app-accent);
+}
+
+/* ---------------------------------------------------------------------------
+   2a. Layout
+   --------------------------------------------------------------------------- */
 body {
   min-height: 100vh;
 }
 
 main.container {
   max-width: 960px;
+}
+
+/* ---------------------------------------------------------------------------
+   2b. Components — recurring chrome.
+   Naming: block `.name`, elements `.name__part`.
+   --------------------------------------------------------------------------- */
+
+/* App navbar — theme hook so the bar colour lives here, not inline utilities.
+   (`navbar navbar-dark` still supplies structure + the light text scheme.) */
+.app-navbar {
+  background-color: var(--app-navbar-bg);
+}
+
+/* Page header — rendered by shell/partials/_page_header.html. */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.page-header__titles {
+  min-width: 0;
+}
+
+.page-header__title {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.page-header__subtitle {
+  margin: 0;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.95rem;
+}
+
+.page-header__actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Content panel — themed container for a page section. */
+.panel {
+  background-color: var(--app-panel-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--app-panel-radius);
+  padding: 1.25rem;
 }

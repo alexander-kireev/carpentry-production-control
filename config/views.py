@@ -1,8 +1,7 @@
 """Project-level views.
 
 ``health`` is the container/health-check endpoint the F1 smoke test relies on.
-``home`` is F2's authenticated landing placeholder — S1 turns this into role
-dispatch.
+The authenticated landing (``/``) is now role dispatch — see ``shell.views.root``.
 """
 
 from django.contrib.auth.decorators import login_required

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-1">Profile</h1>
+<p class="text-muted">Your personal information and settings.</p>
+
+<div class="card" style="max-width: 640px;">
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-3">
+      <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center"
+           style="width: 56px; height: 56px; font-size: 1.25rem;">
+        {{ user.email|first|upper }}
+      </div>
+      <div>
+        <div class="fw-bold">{{ user.email }}</div>
+        <span class="badge text-bg-secondary text-capitalize">{{ effective_role }}</span>
+      </div>
+    </div>
+    <hr>
+    <p class="mb-0 text-muted">
+      Static shell — Profile content and behaviour (identity fields, change
+      requests) are delivered by Slice D.
+    </p>
+  </div>
+</div>
+{% endblock %}
