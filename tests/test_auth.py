@@ -86,13 +86,12 @@ def test_landing_requires_authentication(client):
     assert response["Location"].startswith("/login")
 
 
-def test_landing_renders_for_authenticated_user(client):
+def test_landing_dispatches_authenticated_user_to_role_home(client):
+    # S1 turned `/` into role dispatch; UserFactory defaults to technician.
     user = UserFactory()
     client.force_login(user)
 
     response = client.get("/")
 
-    assert response.status_code == 200
-    # Child template resolves against base.html (title/content blocks render).
-    assert b"Carpentry Production Control" in response.content
-    assert user.email.encode() in response.content
+    assert response.status_code == 302
+    assert response["Location"] == "/tech"

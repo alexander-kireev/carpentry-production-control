@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard · Manager{% endblock %}
+
+{% block content %}
+{% include "shell/partials/_page_header.html" with title="Manager Dashboard" subtitle="Today's jobs, requests, and schedule at a glance." %}
+<div class="panel">
+  <p class="text-muted mb-0">Static shell — page content is delivered by S3 (Manager page tree).</p>
+</div>
+{% endblock %}

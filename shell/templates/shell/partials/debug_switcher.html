@@ -1,0 +1,13 @@
+{# DEBUG-only "view as role" switcher. Rendered only when settings.DEBUG is true
+   (base.html gates on the `debug` context flag); the endpoint 404s otherwise. #}
+<form method="post" action="{% url 'debug_view_as' %}" class="d-flex align-items-center gap-1 mb-0">
+  {% csrf_token %}
+  <label class="text-warning small mb-0">View as</label>
+  <select name="role" class="form-select form-select-sm" style="width:auto"
+          onchange="this.form.submit()" aria-label="View as role (DEBUG only)">
+    <option value="admin"{% if effective_role == 'admin' %} selected{% endif %}>Admin</option>
+    <option value="manager"{% if effective_role == 'manager' %} selected{% endif %}>Manager</option>
+    <option value="operator"{% if effective_role == 'operator' %} selected{% endif %}>Operator</option>
+    <option value="technician"{% if effective_role == 'technician' %} selected{% endif %}>Technician</option>
+  </select>
+</form>
