@@ -1,17 +1,35 @@
-{# Manager nav (S1). Dashboard + Analytics are live; the rest are ported by S3. #}
+{# Manager nav (S2). Every in-MVP destination is a real route. #}
 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
   <li class="nav-item">
     <a class="nav-link{% if request.resolver_match.url_name == 'manager_dashboard' %} active{% endif %}"
        href="{% url 'manager_dashboard' %}">Dashboard</a>
   </li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">My Work</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Orders</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Op Schedule</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Workshop</a></li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'manager_my_work' %} active{% endif %}"
+       href="{% url 'manager_my_work' %}">My Work</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'manager_orders' %} active{% endif %}"
+       href="{% url 'manager_orders' %}">Orders</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'manager_schedule' %} active{% endif %}"
+       href="{% url 'manager_schedule' %}">Op Schedule</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'manager_workshop' %} active{% endif %}"
+       href="{% url 'manager_workshop' %}">Workshop</a>
+  </li>
   <li class="nav-item">
     <a class="nav-link{% if request.resolver_match.url_name == 'analytics' %} active{% endif %}"
        href="{% url 'analytics' %}">Analytics</a>
   </li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Messages</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Notifications</a></li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'messages' %} active{% endif %}"
+       href="{% url 'messages' %}">Messages</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'notifications' %} active{% endif %}"
+       href="{% url 'notifications' %}">Notifications</a>
+  </li>
 </ul>

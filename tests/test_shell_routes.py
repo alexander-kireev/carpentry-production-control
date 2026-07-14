@@ -45,6 +45,66 @@ def test_analytics_placeholder_returns_200(client):
     assert client.get("/analytics").status_code == 200
 
 
+# --- S2 role page skeletons ----------------------------------------------
+
+# Role -> its in-MVP page-skeleton paths (flat, no trailing slash; D-123).
+ROLE_PAGES = {
+    "admin": ["/admin/my-work", "/admin/workshop", "/admin/business"],
+    "manager": [
+        "/manager/my-work",
+        "/manager/orders",
+        "/manager/schedule",
+        "/manager/workshop",
+    ],
+    "operator": [
+        "/operator/my-work",
+        "/operator/schedules",
+        "/operator/workshop",
+        "/operator/requests",
+    ],
+    "technician": [
+        "/tech/my-work",
+        "/tech/schedules",
+        "/tech/workshop",
+        "/tech/orders",
+        "/tech/requests",
+    ],
+}
+
+# Shared pages linked from every role's nav (one route each).
+SHARED_PAGES = ["/messages", "/notifications"]
+
+
+@pytest.mark.parametrize(
+    "role, path",
+    [(role, path) for role, paths in ROLE_PAGES.items() for path in paths],
+)
+def test_role_page_skeleton_returns_200(client, role, path):
+    client.force_login(UserFactory(account_role=role))
+    assert client.get(path).status_code == 200
+
+
+@pytest.mark.parametrize("path", SHARED_PAGES)
+def test_shared_page_returns_200(client, path):
+    client.force_login(UserFactory(account_role="operator"))
+    assert client.get(path).status_code == 200
+
+
+def test_admin_workshop_renders_four_empty_tabs(client):
+    client.force_login(UserFactory(account_role="admin"))
+    response = client.get("/admin/workshop")
+    assert response.status_code == 200
+    content = response.content.decode()
+    for pane_id in ("pane-users-roles", "pane-stations", "pane-materials", "pane-libraries"):
+        assert pane_id in content
+
+
+def test_skeleton_route_requires_login(client):
+    response = client.get("/admin/workshop")
+    assert response.status_code == 302
+    assert response["Location"].startswith("/login")
+
+
 def test_unauthenticated_route_redirects_to_login(client):
     response = client.get("/admin")
     assert response.status_code == 302

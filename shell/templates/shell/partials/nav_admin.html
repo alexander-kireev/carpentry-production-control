@@ -1,12 +1,27 @@
-{# Admin nav (S1). Dashboard is live; other destinations are ported by S2. #}
+{# Admin nav (S2). Every in-MVP destination is a real route. #}
 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
   <li class="nav-item">
     <a class="nav-link{% if request.resolver_match.url_name == 'admin_dashboard' %} active{% endif %}"
        href="{% url 'admin_dashboard' %}">Dashboard</a>
   </li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">My Work</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Workshop</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Business</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Messages</a></li>
-  <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" href="#">Notifications</a></li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'admin_my_work' %} active{% endif %}"
+       href="{% url 'admin_my_work' %}">My Work</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'admin_workshop' %} active{% endif %}"
+       href="{% url 'admin_workshop' %}">Workshop</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'admin_business' %} active{% endif %}"
+       href="{% url 'admin_business' %}">Business</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'messages' %} active{% endif %}"
+       href="{% url 'messages' %}">Messages</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'notifications' %} active{% endif %}"
+       href="{% url 'notifications' %}">Notifications</a>
+  </li>
 </ul>
