@@ -51,6 +51,34 @@ class AnalyticsPlaceholderView(LoginRequiredMixin, TemplateView):
     template_name = "shell/analytics_placeholder.html"
 
 
+class ShellPageView(LoginRequiredMixin, TemplateView):
+    """A hollow S2 page skeleton: ``_page_header`` + empty structural section(s).
+
+    Static shell only — no data or logic. Each route sets ``template_name`` via
+    ``as_view`` (see ``shell/urls.py``); the real interior is delivered by the
+    owning feature slice. No per-role guard here — page-level permissions are
+    Slice H; login is the only gate, as with the S1 dashboards.
+    """
+
+
+class AdminWorkshopView(ShellPageView):
+    """Admin Workshop skeleton — the first consumer of ``_tabs.html``.
+
+    Supplies the four empty tab panes (Users & Roles / Stations / Materials /
+    Libraries) that Slices B and C fill later.
+    """
+
+    template_name = "shell/admin/workshop.html"
+    extra_context = {
+        "tabs": [
+            ("users-roles", "Users & Roles"),
+            ("stations", "Stations"),
+            ("materials", "Materials"),
+            ("libraries", "Libraries"),
+        ]
+    }
+
+
 @require_POST
 @login_required
 def debug_view_as(request):

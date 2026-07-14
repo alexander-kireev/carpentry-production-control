@@ -1,0 +1,22 @@
+{# Reusable Bootstrap tab scaffold (S2). Param:
+     tabs   list of (id, label) pairs — the first tab is shown active.
+   Panes are deliberately empty: this is a hollow skeleton and each feature
+   slice fills its own pane's interior later. Bootstrap's bundle JS drives the
+   switching via data-bs-toggle; no custom CSS or component classes needed. #}
+<ul class="nav nav-tabs" role="tablist">
+  {% for id, label in tabs %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link{% if forloop.first %} active{% endif %}" id="tab-{{ id }}"
+            data-bs-toggle="tab" data-bs-target="#pane-{{ id }}" type="button" role="tab"
+            aria-controls="pane-{{ id }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+      {{ label }}
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+<div class="tab-content pt-3">
+  {% for id, label in tabs %}
+  <div class="tab-pane fade{% if forloop.first %} show active{% endif %}" id="pane-{{ id }}"
+       role="tabpanel" aria-labelledby="tab-{{ id }}" tabindex="0"></div>
+  {% endfor %}
+</div>
