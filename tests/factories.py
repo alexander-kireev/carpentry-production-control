@@ -32,10 +32,23 @@ DEFAULT_PASSWORD = "workshop-pass-123"
 class UserFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = User
+        skip_postgeneration_save = True
 
     email = factory.Sequence(lambda n: f"user{n}@example.com")
     account_role = User.AccountRole.TECHNICIAN
     password = factory.django.Password(DEFAULT_PASSWORD)
+    # Required domain field (D0-2); a fixed, obviously-synthetic DOB.
+    date_of_birth = datetime.date(1990, 1, 1)
+    # Non-null in practice: every user carries a workshop_role. `workshop` is
+    # left null (valid — the admin exists before a workshop, decision 2). String
+    # reference because WorkshopRoleFactory is defined later in this module.
+    workshop_role = factory.SubFactory("tests.factories.WorkshopRoleFactory")
+
+    @factory.post_generation
+    def clearances(self, create, extracted, **kwargs):
+        if not create or not extracted:
+            return
+        self.clearances.add(*extracted)
 
 
 class WorkshopFactory(factory.django.DjangoModelFactory):
