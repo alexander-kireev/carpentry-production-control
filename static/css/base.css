@@ -1,0 +1,10 @@
+/* Base stylesheet (F2). Small project-level overrides on top of Bootstrap 5.
+   Role-specific styling arrives with later slices. */
+
+body {
+  min-height: 100vh;
+}
+
+main.container {
+  max-width: 960px;
+}
