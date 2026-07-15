@@ -17,6 +17,7 @@ urlpatterns = [
     path("logout", LogoutView.as_view(), name="logout"),
     path("register", register, name="register"),
     path("", include("workshop.urls")),
+    path("", include("catalog.urls")),
     path("health/", health, name="health"),
     path("", include("shell.urls")),
 ]

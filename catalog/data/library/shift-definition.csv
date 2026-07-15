@@ -1,0 +1,7 @@
+name,start_time,end_time,days
+Early Shift,06:00,14:00,mon;tue;wed;thu;fri
+Day Shift,08:00,16:30,mon;tue;wed;thu;fri
+Late Shift,14:00,22:00,mon;tue;wed;thu;fri;sat
+Night Shift,22:00,06:00,mon;tue;wed;thu;fri
+Weekend Shift,08:00,16:00,sat;sun
+Saturday Shift,08:00,12:00,sat

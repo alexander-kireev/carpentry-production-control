@@ -1,9 +1,9 @@
-{# Page header chrome (S1). Params:
+{% comment %} Page header chrome (S1). Params:
      title                    (required) heading text
      subtitle                 (optional) muted sub-line
      action_label, action_url (optional) a single primary action button
    Styling: .page-header in css/base.css. Multi-action headers are composed by
-   the feature that needs them — this covers the common title(+subtitle) case. #}
+   the feature that needs them — this covers the common title(+subtitle) case. {% endcomment %}
 <div class="page-header">
   <div class="page-header__titles">
     <h1 class="page-header__title">{{ title }}</h1>

@@ -99,6 +99,26 @@ def test_admin_workshop_renders_four_empty_tabs(client):
         assert pane_id in content
 
 
+def test_admin_workshop_has_no_leaked_template_comments(client):
+    # Multi-line {# #} is not a valid Django comment (no re.DOTALL) and leaks as
+    # literal text; use {% comment %} instead. Guard the workshop page's partials.
+    client.force_login(UserFactory(account_role="admin"))
+    content = client.get("/admin/workshop").content.decode()
+    assert "{#" not in content
+    assert "{% comment %}" not in content
+    assert "Reusable Bootstrap tab scaffold" not in content
+    assert "Page header chrome" not in content
+
+
+@pytest.mark.parametrize("role, landing", LANDINGS.items())
+def test_landings_have_no_leaked_template_comments(client, role, landing):
+    # Covers base.html plus each role's nav partial and the active-op bar.
+    client.force_login(UserFactory(account_role=role))
+    content = client.get(landing).content.decode()
+    assert "{#" not in content
+    assert "{% comment %}" not in content
+
+
 def test_skeleton_route_requires_login(client):
     response = client.get("/admin/workshop")
     assert response.status_code == 302

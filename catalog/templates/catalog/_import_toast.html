@@ -1,0 +1,25 @@
+{% comment %} Import result toast (C1). Transient — it rides on top of the refreshed
+   table fragment and is replaced the next time the table is swapped. `summary` is
+   a catalog.services.ImportSummary. {% endcomment %}
+{% if summary.error %}
+<div class="alert alert-danger alert-dismissible py-2 mb-2" role="alert">
+  <strong>Import failed.</strong> {{ summary.error }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% else %}
+<div class="alert alert-success alert-dismissible py-2 mb-2" role="alert">
+  <strong>Import complete</strong>
+  <div class="small">{{ summary.imported }} imported · {{ summary.skipped_count }} skipped</div>
+  {% if summary.skipped %}
+  <details class="mt-1">
+    <summary class="small">View details ({{ summary.skipped_count }} skipped)</summary>
+    <ul class="small mb-0 mt-1 ps-3">
+      {% for row in summary.skipped %}
+      <li>Row {{ row.row }} “{{ row.name|default:"—" }}” — {{ row.reason }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}

@@ -1,5 +1,5 @@
-{# Operator nav (S2). Every in-MVP destination is a real route. Workshop
-   (read-only) added per the mockup inventory — it was absent in S1. #}
+{% comment %} Operator nav (S2). Every in-MVP destination is a real route. Workshop
+   (read-only) added per the mockup inventory — it was absent in S1. {% endcomment %}
 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
   <li class="nav-item">
     <a class="nav-link{% if request.resolver_match.url_name == 'operator_dashboard' %} active{% endif %}"

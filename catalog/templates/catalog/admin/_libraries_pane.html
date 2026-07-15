@@ -1,0 +1,29 @@
+{% comment %} Libraries tab pane (C1) — one card per dependency-free type. Fills
+   the empty pane the S2 skeleton left (via _tabs.html's optional pane include).
+   Each card lazy-loads its read-only table (HTMX); Import posts and swaps the
+   table in place with a summary toast. `libraries` is supplied by
+   AdminWorkshopView; the pane-level hx-headers carries the CSRF token. {% endcomment %}
+<div class="row g-3" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {% for lib in libraries %}
+  <div class="col-xl-6">
+    <div class="card lib-card h-100">
+      <div class="card-header d-flex align-items-center gap-2 py-2">
+        <span class="fw-semibold">{{ lib.label }}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+                hx-post="{% url 'catalog:library_import' slug=lib.slug %}"
+                hx-target="#lib-table-{{ lib.slug }}" hx-swap="innerHTML"
+                hx-disabled-elt="this">
+          Import default library
+        </button>
+      </div>
+      <div class="card-body">
+        <div id="lib-table-{{ lib.slug }}"
+             hx-get="{% url 'catalog:library_table' slug=lib.slug %}"
+             hx-trigger="load" hx-swap="innerHTML">
+          <div class="text-muted small text-center py-3">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

@@ -1,0 +1,88 @@
+{% comment %} Read-only library table fragment (C1). Rendered on lazy-load and
+   swapped on every search / sort / filter / paginate. All four compose through
+   one query string per table: sort headers and pagination links use the
+   querystring tag to preserve the rest; the search box and filter re-send the
+   toolbar's state via hx-include (and omit page, so a new term resets to
+   page 1). Rendered after an import with `summary` set → the toast on top. {% endcomment %}
+{% load library_extras %}
+
+{% if summary %}{% include "catalog/_import_toast.html" %}{% endif %}
+
+<div class="lib-toolbar d-flex flex-wrap gap-2 mb-2">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ dir }}">
+  <input class="lib-search form-control form-control-sm" type="search" name="search"
+         value="{{ search }}" placeholder="Search…" autocomplete="off" style="max-width:220px"
+         hx-get="{% url 'catalog:library_table' slug=lib.slug %}"
+         hx-target="#lib-table-{{ lib.slug }}" hx-swap="innerHTML"
+         hx-trigger="input changed delay:300ms, search"
+         hx-include="closest .lib-toolbar">
+  {% if lib.filter %}
+  <select class="lib-filter form-select form-select-sm" name="{{ lib.filter.param }}"
+          style="max-width:200px" aria-label="{{ lib.filter.label }}"
+          hx-get="{% url 'catalog:library_table' slug=lib.slug %}"
+          hx-target="#lib-table-{{ lib.slug }}" hx-swap="innerHTML"
+          hx-trigger="change" hx-include="closest .lib-toolbar">
+    {% for opt in lib.filter.options %}
+    <option value="{{ opt.value }}"{% if opt.value == filter_value %} selected{% endif %}>{{ opt.label }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+</div>
+
+{% if page_obj.paginator.count %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle lib-table mb-2">
+    <thead>
+      <tr>
+        {% for col in columns %}
+        <th scope="col" class="text-nowrap">
+          {% if col.sortable %}
+          <a role="button" class="text-decoration-none text-reset" style="cursor:pointer"
+             hx-get="{% url 'catalog:library_table' slug=lib.slug %}{% querystring sort=col.key dir=col.next_dir page=1 %}"
+             hx-target="#lib-table-{{ lib.slug }}" hx-swap="innerHTML">{{ col.label }}{% if col.indicator %} {{ col.indicator }}{% endif %}</a>
+          {% else %}{{ col.label }}{% endif %}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for obj in page_obj %}
+      <tr>
+        {% for col in columns %}{% with value=obj|model_field:col.key %}
+        <td>
+          {% if col.kind == "bool" %}{% if value %}<span class="badge text-bg-secondary">Production</span>{% else %}<span class="badge text-bg-light border">Non-production</span>{% endif %}
+          {% elif col.kind == "colour" %}<span class="swatch" style="background:{{ value }}"></span><span class="text-muted small">{{ value }}</span>
+          {% elif col.kind == "time" %}{{ value|time:"H:i" }}
+          {% elif col.kind == "days" %}{% for d in value %}{{ d|title }}{% if not forloop.last %}, {% endif %}{% endfor %}
+          {% else %}{{ value }}{% endif %}
+        </td>
+        {% endwith %}{% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="d-flex justify-content-between align-items-center">
+  <span class="text-muted small">
+    {{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}{% if page_obj.paginator.num_pages > 1 %} · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}{% endif %}
+  </span>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="btn-group btn-group-sm" role="group" aria-label="Pagination">
+    {% if page_obj.has_previous %}
+    <a role="button" class="btn btn-outline-secondary"
+       hx-get="{% url 'catalog:library_table' slug=lib.slug %}{% querystring page=page_obj.previous_page_number %}"
+       hx-target="#lib-table-{{ lib.slug }}" hx-swap="innerHTML">Prev</a>
+    {% else %}<span class="btn btn-outline-secondary disabled" aria-disabled="true">Prev</span>{% endif %}
+    {% if page_obj.has_next %}
+    <a role="button" class="btn btn-outline-secondary"
+       hx-get="{% url 'catalog:library_table' slug=lib.slug %}{% querystring page=page_obj.next_page_number %}"
+       hx-target="#lib-table-{{ lib.slug }}" hx-swap="innerHTML">Next</a>
+    {% else %}<span class="btn btn-outline-secondary disabled" aria-disabled="true">Next</span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="text-muted text-center py-4">No records imported yet</div>
+{% endif %}
