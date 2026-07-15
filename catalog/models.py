@@ -349,10 +349,13 @@ class MaterialVariant(models.Model):
     )
     spec_label = models.CharField(max_length=100)
     # Quantities are in the parent Material's unit. Decimal (not float) so
-    # reservation/stock arithmetic stays exact.
-    current_stock = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    # reservation/stock arithmetic stays exact. current_stock and min_threshold
+    # are domain-Required and carry no model default (D-125 / D0-4): a silent 0
+    # would mask missing data (e.g. min_threshold=0 "never flags low"). reserved
+    # is system-maintained and legitimately starts at 0.
+    current_stock = models.DecimalField(max_digits=12, decimal_places=3)
     reserved = models.DecimalField(max_digits=12, decimal_places=3, default=0)
-    min_threshold = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    min_threshold = models.DecimalField(max_digits=12, decimal_places=3)
     lot_sizes = models.JSONField(default=list)
     status = models.CharField(
         max_length=16, choices=Status.choices, default=Status.ACTIVE
