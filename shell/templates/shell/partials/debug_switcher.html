@@ -1,5 +1,5 @@
-{# DEBUG-only "view as role" switcher. Rendered only when settings.DEBUG is true
-   (base.html gates on the `debug` context flag); the endpoint 404s otherwise. #}
+{% comment %} DEBUG-only "view as role" switcher. Rendered only when settings.DEBUG
+   is true (base.html gates on the `debug` context flag); the endpoint 404s otherwise. {% endcomment %}
 <form method="post" action="{% url 'debug_view_as' %}" class="d-flex align-items-center gap-1 mb-0">
   {% csrf_token %}
   <label class="text-warning small mb-0">View as</label>

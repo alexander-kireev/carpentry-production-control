@@ -12,8 +12,8 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-  {# Single shell skeleton (S1). Role nav is chosen by effective_role; plain
-     Bootstrap for now — the Stage 06 mockups are a reference, not canon. #}
+  {% comment %} Single shell skeleton (S1). Role nav is chosen by effective_role;
+     plain Bootstrap for now — the Stage 06 mockups are a reference, not canon. {% endcomment %}
   <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
     <div class="container-fluid">
       <a class="navbar-brand" href="{% url 'root' %}">PCMS</a>
@@ -63,6 +63,9 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  {% comment %} HTMX (first used by the Slice C library tables/import). Inert until
+     an element carries hx-* attributes, so it has no effect on other pages. {% endcomment %}
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

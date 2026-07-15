@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
 from accounts.models import User
+from catalog.library_config import DISPLAY_LIBRARY_TYPES
 from shell.roles import OVERRIDE_SESSION_KEY, ROLE_LANDING, get_effective_role
 
 
@@ -64,19 +65,23 @@ class ShellPageView(LoginRequiredMixin, TemplateView):
 class AdminWorkshopView(ShellPageView):
     """Admin Workshop skeleton — the first consumer of ``_tabs.html``.
 
-    Supplies the four empty tab panes (Users & Roles / Stations / Materials /
-    Libraries) that Slices B and C fill later.
+    Tab tuples are ``(id, label, pane_template)``; a ``None`` pane stays empty.
+    Slice C fills the Libraries pane (the five dependency-free types); the other
+    three panes are filled by Slices B and C2 later.
     """
 
     template_name = "shell/admin/workshop.html"
-    extra_context = {
-        "tabs": [
-            ("users-roles", "Users & Roles"),
-            ("stations", "Stations"),
-            ("materials", "Materials"),
-            ("libraries", "Libraries"),
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["tabs"] = [
+            ("users-roles", "Users & Roles", None),
+            ("stations", "Stations", None),
+            ("materials", "Materials", None),
+            ("libraries", "Libraries", "catalog/admin/_libraries_pane.html"),
         ]
-    }
+        context["libraries"] = DISPLAY_LIBRARY_TYPES
+        return context
 
 
 @require_POST

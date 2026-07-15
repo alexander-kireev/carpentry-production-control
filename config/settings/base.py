@@ -115,6 +115,10 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
+# Bundled default-library CSV files, read by catalog.services.import_library
+# (Slice C). Deployment assets, not user uploads — there is no file picker in MVP.
+LIBRARY_IMPORT_DIR = BASE_DIR / "catalog" / "data" / "library"
+
 # Authentication flow (F2). Login is by email (accounts.User.USERNAME_FIELD);
 # these routes are defined in config/urls.py.
 LOGIN_URL = "/login"

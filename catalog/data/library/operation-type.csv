@@ -1,0 +1,28 @@
+name,description,is_production
+Build Planning,Planning and specifying a build before production,false
+Cutting,Cutting stock to rough length,true
+Ripping,Ripping boards to width on the saw,true
+Cross-Cutting,Cross-cutting stock to final length,true
+Planing,Planing faces flat and square,true
+Thicknessing,Dimensioning stock to final thickness,true
+Jointing,Edge-jointing boards for glue-up,true
+Mortising,Cutting mortises for framed joints,true
+Tenoning,Cutting tenons to match mortises,true
+Dowelling,Boring and fitting dowel joints,true
+Biscuit Jointing,Cutting biscuit slots for alignment,true
+Routing,Routing profiles grooves and recesses,true
+Moulding,Running mouldings and profiles,true
+Drilling,Drilling and boring holes,true
+Sanding,Sanding surfaces to a finish-ready state,true
+Edge Banding,Applying edge banding to panel edges,true
+Veneering,Laying veneer onto substrates,true
+Assembly,Assembling components into sub-units,true
+Glue-Up,Gluing and clamping assemblies,true
+Fitting,Fitting hardware hinges and fittings,true
+Spray Finishing,Spray-applying finishes and coatings,true
+Staining,Applying stain to prepared surfaces,true
+Lacquering,Applying lacquer topcoats,true
+Oiling,Applying penetrating oil finishes,true
+Waxing,Applying and buffing wax finishes,true
+Quality Check,Inspecting finished work against spec,true
+Packing,Protecting and packing goods for dispatch,true
