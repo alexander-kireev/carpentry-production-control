@@ -227,6 +227,38 @@ def test_stock_status_persists_correctly_on_saved_variant():
 
 
 # --------------------------------------------------------------------------- #
+# MaterialVariant required stock fields — no silent default (D-125 / D0-4)
+# --------------------------------------------------------------------------- #
+
+
+def test_material_variant_stock_fields_have_no_model_default():
+    # current_stock and min_threshold are domain-Required: an unset value is None,
+    # not a silent 0. reserved is system-maintained and keeps its explicit default.
+    variant = MaterialVariant()
+    assert variant.current_stock is None
+    assert variant.min_threshold is None
+    assert variant.reserved == 0
+
+
+def test_material_variant_requires_current_stock():
+    material = MaterialFactory()
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            MaterialVariant.objects.create(
+                material=material, spec_label="2000x150x50", min_threshold=Decimal("5")
+            )
+
+
+def test_material_variant_requires_min_threshold():
+    material = MaterialFactory()
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            MaterialVariant.objects.create(
+                material=material, spec_label="2000x150x50", current_stock=Decimal("10")
+            )
+
+
+# --------------------------------------------------------------------------- #
 # Material may have zero variants (D-121 / KI-011)
 # --------------------------------------------------------------------------- #
 
