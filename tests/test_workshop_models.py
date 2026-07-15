@@ -35,12 +35,16 @@ def test_workshop_str_is_name():
 
 
 def test_sentinel_types_allow_null_workshop():
-    # These rows model the D0-3 system sentinels that exist before a Workshop.
+    # The three sentinel-bearing types accept a NULL workshop — the mechanism
+    # D0-3 relies on to seed workshop-independent rows. Synthetic names keep this
+    # decoupled from the actual seeded sentinels (see test_system_seeds).
     station_cat = StationCategory.objects.create(
-        workshop=None, name="undefined", colour="#cccccc"
+        workshop=None, name="null-ws-station-cat", colour="#cccccc"
     )
-    material_cat = MaterialCategory.objects.create(workshop=None, name="undefined")
-    role = WorkshopRole.objects.create(workshop=None, name="Admin")
+    material_cat = MaterialCategory.objects.create(
+        workshop=None, name="null-ws-material-cat"
+    )
+    role = WorkshopRole.objects.create(workshop=None, name="null-ws-role")
 
     assert station_cat.workshop_id is None
     assert material_cat.workshop_id is None
@@ -49,37 +53,45 @@ def test_sentinel_types_allow_null_workshop():
 
 def test_distinct_null_workshop_names_coexist():
     # nulls_distinct=False only blocks a *duplicate* (workshop, name) — two
-    # differently-named NULL-workshop sentinels are fine ("Admin" + "undefined").
-    WorkshopRole.objects.create(workshop=None, name="Admin")
-    WorkshopRole.objects.create(workshop=None, name="undefined")
+    # differently-named NULL-workshop rows coexist. Synthetic names, asserted by
+    # name so the seeded sentinels don't perturb the count.
+    WorkshopRole.objects.create(workshop=None, name="null-ws-role-a")
+    WorkshopRole.objects.create(workshop=None, name="null-ws-role-b")
 
-    assert WorkshopRole.objects.filter(workshop__isnull=True).count() == 2
+    assert (
+        WorkshopRole.objects.filter(
+            workshop__isnull=True, name__in=["null-ws-role-a", "null-ws-role-b"]
+        ).count()
+        == 2
+    )
 
 
 # --- nulls_distinct=False rejects a duplicate NULL-workshop row (the AC) ---
 
 
 def test_duplicate_null_workshop_role_rejected():
-    WorkshopRole.objects.create(workshop=None, name="Admin")
+    WorkshopRole.objects.create(workshop=None, name="null-ws-dup-role")
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            WorkshopRole.objects.create(workshop=None, name="Admin")
+            WorkshopRole.objects.create(workshop=None, name="null-ws-dup-role")
 
 
 def test_duplicate_null_workshop_material_category_rejected():
-    MaterialCategory.objects.create(workshop=None, name="undefined")
+    MaterialCategory.objects.create(workshop=None, name="null-ws-dup-mc")
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            MaterialCategory.objects.create(workshop=None, name="undefined")
+            MaterialCategory.objects.create(workshop=None, name="null-ws-dup-mc")
 
 
 def test_duplicate_null_workshop_station_category_name_rejected():
-    StationCategory.objects.create(workshop=None, name="undefined", colour="#111111")
+    StationCategory.objects.create(
+        workshop=None, name="null-ws-dup-sc", colour="#111111"
+    )
     with pytest.raises(IntegrityError):
         with transaction.atomic():
             # Same name, different colour → still blocked by the name constraint.
             StationCategory.objects.create(
-                workshop=None, name="undefined", colour="#222222"
+                workshop=None, name="null-ws-dup-sc", colour="#222222"
             )
 
 
