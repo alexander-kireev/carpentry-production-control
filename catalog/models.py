@@ -342,7 +342,7 @@ class MaterialVariant(models.Model):
     class StockStatus(models.TextChoices):
         CLEAR = "clear", "Clear"
         LOW = "low", "Low"
-        CRITICAL = "critical", "Critical"
+        OUT = "out", "Out"
 
     material = models.ForeignKey(
         Material, on_delete=models.CASCADE, related_name="variants"
@@ -371,14 +371,19 @@ class MaterialVariant(models.Model):
 
     @property
     def available(self):
-        """current_stock - reserved; can be negative (critical)."""
+        """current_stock - reserved; can be negative. Not used in stock_status (MVP)."""
         return self.current_stock - self.reserved
 
     @property
     def stock_status(self) -> str:
-        """Derived clear/low/critical — computed on read, never stored."""
-        if self.available < 0:
-            return self.StockStatus.CRITICAL
+        """Derived clear/low/out from current_stock vs min_threshold — never stored.
+
+        MVP is stock-vs-threshold only; the reservation-aware ``available``/
+        ``critical`` variant is deferred post-MVP. ``== 0`` is checked first so an
+        empty variant with ``min_threshold == 0`` reads ``out``, not ``clear``.
+        """
+        if self.current_stock == 0:
+            return self.StockStatus.OUT
         if self.current_stock < self.min_threshold:
             return self.StockStatus.LOW
         return self.StockStatus.CLEAR

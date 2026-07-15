@@ -193,13 +193,16 @@ def test_material_variant_spec_label_reusable_across_materials():
 @pytest.mark.parametrize(
     "current, reserved, threshold, expected",
     [
-        (Decimal("10"), Decimal("0"), Decimal("5"), "clear"),      # above threshold
-        (Decimal("5"), Decimal("0"), Decimal("5"), "clear"),       # exactly at threshold
-        (Decimal("5"), Decimal("5"), Decimal("5"), "clear"),       # available == 0, not critical
-        (Decimal("3"), Decimal("0"), Decimal("5"), "low"),         # below threshold
-        (Decimal("5"), Decimal("5"), Decimal("10"), "low"),        # available 0, below threshold
-        (Decimal("5"), Decimal("8"), Decimal("5"), "critical"),    # available < 0
-        (Decimal("10"), Decimal("15"), Decimal("5"), "critical"),  # negative even above threshold
+        # MVP: out if current_stock == 0; low if 0 < current < threshold; clear if
+        # current >= threshold. reserved/available never factor in. Two rows flip
+        # verdict from the old reservation-aware model (marked "was critical").
+        (Decimal("10"), Decimal("0"), Decimal("5"), "clear"),  # above threshold
+        (Decimal("5"), Decimal("0"), Decimal("5"), "clear"),  # at threshold
+        (Decimal("3"), Decimal("0"), Decimal("5"), "low"),  # 0 < current < threshold
+        (Decimal("0"), Decimal("0"), Decimal("5"), "out"),  # empty stock
+        (Decimal("0"), Decimal("0"), Decimal("0"), "out"),  # == 0 precedence over clear
+        (Decimal("0"), Decimal("3"), Decimal("5"), "out"),  # was critical (reserved ignored)
+        (Decimal("8"), Decimal("10"), Decimal("5"), "clear"),  # was critical (reserved > stock)
     ],
 )
 def test_stock_status_boundaries(current, reserved, threshold, expected):
@@ -211,11 +214,13 @@ def test_stock_status_boundaries(current, reserved, threshold, expected):
 
 
 def test_available_can_be_negative():
+    # available stays current_stock - reserved and can go negative, but no longer
+    # drives stock_status (MVP is stock-vs-threshold only): current_stock 2 >= 1.
     variant = MaterialVariant(
         current_stock=Decimal("2"), reserved=Decimal("5"), min_threshold=Decimal("1")
     )
     assert variant.available == Decimal("-3")
-    assert variant.stock_status == "critical"
+    assert variant.stock_status == "clear"
 
 
 def test_stock_status_persists_correctly_on_saved_variant():
