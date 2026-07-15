@@ -1,14 +1,16 @@
-"""Admin self-registration (A1): register form, ``register_admin`` service, the
-one-admin guard, and the password policy. Acceptance criteria = test contract
-(slice_map §4). Criterion 5 (unauthenticated -> login redirect) is existing F2
-coverage in ``test_auth.py`` and isn't duplicated here.
+"""Admin self-registration (A1; opened up in A2 per D-126): register form,
+``register_admin`` service, open registration, and the password policy.
+Acceptance criteria = test contract (slice_map §4). Criterion 5 (unauthenticated
+-> login redirect) is existing F2 coverage in ``test_auth.py`` and isn't
+duplicated here.
 """
 
 import pytest
+from django.test import Client
 
 from accounts.forms import AdminRegisterForm
 from accounts.models import User
-from accounts.services import AdminExistsError, register_admin
+from accounts.services import register_admin
 from catalog.models import WorkshopRole
 from catalog.seeds import ADMIN_ROLE_NAME
 
@@ -64,7 +66,6 @@ def test_register_get_renders_form_with_password_hint(client):
     response = client.get("/register")
 
     assert response.status_code == 200
-    assert response.context["locked"] is False
     assert b"at least 10 characters" in response.content.lower()
 
 
@@ -143,39 +144,51 @@ def test_mismatched_password_confirmation_rejected(client):
     assert not User.objects.filter(email="jamie.carter@example.com").exists()
 
 
-# --- Criterion 3: one-admin guard --------------------------------------------
+# --- Criterion 6 (D-126): registration is open — no lockout ------------------
 
 
-def test_register_view_locks_once_an_admin_exists(client):
+def test_second_registration_creates_a_second_independent_admin(client):
+    # First registration logs this client in as admin #1 (workshop-less).
     client.post("/register", _valid_post_data())
 
-    response = client.post(
+    # A second person registers from a fresh, unauthenticated session. The first
+    # client can't be reused: it's now authenticated but workshop-less, so the
+    # setup-gate would intercept its next request before /register.
+    fresh = Client()
+    response = fresh.post(
         "/register",
         _valid_post_data(
             first_name="Alex", last_name="Doe", email="alex.doe@example.com"
         ),
     )
 
-    assert response.status_code == 200
-    assert response.context["locked"] is True
-    assert not User.objects.filter(email="alex.doe@example.com").exists()
+    assert response.status_code == 302
+    assert response["Location"] == "/workshop/setup"
+    assert User.objects.filter(account_role=User.AccountRole.ADMIN).count() == 2
+    # The second admin is independent and still workshop-less pre-setup.
+    second = User.objects.get(email="alex.doe@example.com")
+    assert second.workshop_id is None
 
 
-def test_register_get_locks_once_an_admin_exists(client):
+def test_register_get_is_always_open_once_an_admin_exists(client):
+    # No lockout state remains (D-126): GET /register still renders the form
+    # even with an admin already present.
     client.post("/register", _valid_post_data())
 
-    response = client.get("/register")
+    fresh = Client()
+    response = fresh.get("/register")
 
     assert response.status_code == 200
-    assert response.context["locked"] is True
+    assert "form" in response.context
 
 
-def test_register_admin_service_refuses_when_admin_already_exists():
-    # Proves the guard lives in the service itself, not only the view's
-    # pre-check — calling register_admin twice directly, bypassing /register.
+def test_register_admin_service_allows_multiple_admins():
+    # Proves open registration lives in the service itself, not just the view:
+    # register_admin twice yields two independent admins, no exception (the A1
+    # AdminExistsError guard is gone — D-126).
     first_form = AdminRegisterForm(data=_valid_post_data())
     assert first_form.is_valid(), first_form.errors
-    register_admin(first_form)
+    first = register_admin(first_form)
 
     second_form = AdminRegisterForm(
         data=_valid_post_data(
@@ -183,10 +196,11 @@ def test_register_admin_service_refuses_when_admin_already_exists():
         )
     )
     assert second_form.is_valid(), second_form.errors
-    with pytest.raises(AdminExistsError):
-        register_admin(second_form)
+    second = register_admin(second_form)
 
-    assert not User.objects.filter(email="alex.doe@example.com").exists()
+    assert first.pk != second.pk
+    assert first.workshop_id is None and second.workshop_id is None
+    assert User.objects.filter(account_role=User.AccountRole.ADMIN).count() == 2
 
 
 def test_register_admin_assigns_seeded_admin_role_directly():

@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "accounts",
     "catalog",
     "shell",
+    "workshop",
 ]
 
 MIDDLEWARE = [
@@ -58,7 +59,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "shell.middleware.SetupGateMiddleware",
+    "workshop.middleware.WorkshopSetupGateMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

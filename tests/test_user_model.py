@@ -89,11 +89,14 @@ def test_status_offers_four_choices_and_defaults_to_pending():
     assert UserFactory().status == User.Status.PENDING == "pending"
 
 
-def test_workshop_is_nullable_and_defaults_null():
+def test_workshop_is_nullable():
     # The admin exists before a workshop (decision 2): a user with no workshop
-    # is valid and saveable.
-    user = UserFactory()
+    # is valid and saveable. The factory now defaults to a workshop member (the
+    # normal D-126 steady state), so pass workshop=None to exercise the
+    # transient pre-setup state explicitly.
+    user = UserFactory(workshop=None)
     assert user.workshop is None
+    assert user.pk is not None
     assert User._meta.get_field("workshop").null is True
 
 
