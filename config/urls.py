@@ -16,6 +16,7 @@ urlpatterns = [
     path("login", LoginView.as_view(), name="login"),
     path("logout", LogoutView.as_view(), name="logout"),
     path("register", register, name="register"),
+    path("", include("workshop.urls")),
     path("health/", health, name="health"),
     path("", include("shell.urls")),
 ]

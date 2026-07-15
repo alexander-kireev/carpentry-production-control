@@ -39,10 +39,18 @@ class UserFactory(factory.django.DjangoModelFactory):
     password = factory.django.Password(DEFAULT_PASSWORD)
     # Required domain field (D0-2); a fixed, obviously-synthetic DOB.
     date_of_birth = datetime.date(1990, 1, 1)
-    # Non-null in practice: every user carries a workshop_role. `workshop` is
-    # left null (valid — the admin exists before a workshop, decision 2). String
-    # reference because WorkshopRoleFactory is defined later in this module.
-    workshop_role = factory.SubFactory("tests.factories.WorkshopRoleFactory")
+    # A workshop member is the normal steady state under D-126, and the real
+    # setup-gate (A2) redirects any workshop-less authenticated user — so the
+    # factory default gives the user a workshop, with their workshop_role scoped
+    # to that same workshop (the StationFactory pattern below). Tests that need
+    # the transient pre-setup admin pass `workshop=None` explicitly. String
+    # references because WorkshopFactory / WorkshopRoleFactory are defined later
+    # in this module.
+    workshop = factory.SubFactory("tests.factories.WorkshopFactory")
+    workshop_role = factory.SubFactory(
+        "tests.factories.WorkshopRoleFactory",
+        workshop=factory.SelfAttribute("..workshop"),
+    )
 
     @factory.post_generation
     def clearances(self, create, extracted, **kwargs):

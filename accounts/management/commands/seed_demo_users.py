@@ -9,10 +9,12 @@ invitations land.
 Dev-only and idempotent: it refuses to run with ``DEBUG=False`` and every row it
 creates is guarded by an existence check, so re-running never duplicates.
 
-Singleton caveat: creating the demo Workshop satisfies (and thereby bypasses) the
-real A1 registration + A2 setup-gate flow. This is a shell-demo tool for a
-throwaway dev database, **not** to be combined with a manual A walkthrough on the
-same DB — use a fresh database to exercise the real registration/gate flow.
+Multi-workshop note (D-126): the demo Workshop is found-or-created by its own
+name and coexists with any real workshops on the instance — it never adopts a
+real one. Its demo users still bypass the real A1 registration + A2 setup-gate
+flow, so this remains a shell-demo tool for a throwaway dev database, **not** to
+be combined with a manual A walkthrough on the same DB — use a fresh database to
+exercise the real registration/gate flow.
 """
 
 import datetime
@@ -96,11 +98,20 @@ class Command(BaseCommand):
         self._report(workshop, workshop_created, created, existing)
 
     def _ensure_workshop(self):
-        """Return the demo Workshop, creating the singleton if none exists."""
-        workshop = Workshop.objects.first()
-        if workshop is not None:
-            return workshop, False
-        return Workshop.objects.create(**DEMO_WORKSHOP), True
+        """Return the demo Workshop, creating it by name if absent.
+
+        Keyed on the demo name — not ``Workshop.objects.first()``, which under
+        the multi-workshop model (D-126) would grab an arbitrary real workshop
+        and attach demo users to it.
+        """
+        workshop, created = Workshop.objects.get_or_create(
+            name=DEMO_WORKSHOP["name"],
+            defaults={
+                "address": DEMO_WORKSHOP["address"],
+                "email": DEMO_WORKSHOP["email"],
+            },
+        )
+        return workshop, created
 
     def _load_roles(self):
         """Look up the D0-3 seeded, workshop-independent WorkshopRole sentinels."""

@@ -19,6 +19,7 @@ from django.core.management.base import CommandError
 from accounts.models import User
 from catalog.models import Workshop
 from catalog.seeds import ADMIN_ROLE_NAME, UNDEFINED_NAME
+from tests.factories import WorkshopFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -87,3 +88,21 @@ def test_refuses_to_run_outside_debug(settings):
     # Guard fires before anything is created.
     assert User.objects.count() == 0
     assert Workshop.objects.count() == 0
+
+
+def test_seed_creates_own_demo_workshop_when_a_real_workshop_exists(settings):
+    # Criterion 8 (D-126): with a real (non-demo) workshop already present,
+    # seeding must create its OWN demo workshop rather than adopt the real one
+    # (the pre-D-126 Workshop.objects.first() behaviour).
+    settings.DEBUG = True
+    real = WorkshopFactory(name="Real Joinery Co")
+
+    call_command("seed_demo_users")
+
+    assert Workshop.objects.count() == 2
+    demo = Workshop.objects.get(name="Demo Carpentry Workshop")
+    assert demo.pk != real.pk
+    # Every demo user is attached to the demo workshop, never the real one.
+    for email in EXPECTED:
+        assert User.objects.get(email=email).workshop_id == demo.pk
+    assert not real.users.exists()

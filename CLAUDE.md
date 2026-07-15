@@ -2,7 +2,9 @@
 
 ## Project Identity
 
-This is a Django/PostgreSQL production-control system for a small carpentry workshop. It is a portfolio backend project.
+This is a Django/PostgreSQL production-control system for small carpentry workshops. It is a portfolio backend project.
+
+One instance hosts multiple fully isolated workshops (D-126): each admin self-registers and owns exactly one workshop, and every workshop-owned query/create/view must be scoped to the requesting user's workshop — never `Workshop.objects.first()` or a global count as a state check. The only global rows are the seeded system sentinels (`workshop=NULL`). See the planning repo's `docs/13_claude/conventions.md`, "Tenancy / workshop scoping".
 
 The system manages workshop orders, jobs, operation routes, material reservation, scheduling, blockers, analytics, and backup. It is not a generic ERP, a marketplace, a booking platform, or a customer-facing product. (QC/rework and Demo Mode are post-MVP — see the planning repo's post_mvp_backlog.md.)
 
