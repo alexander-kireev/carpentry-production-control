@@ -161,7 +161,7 @@ def _process_row(lib, workshop, raw, row_no, summary):
         ]
         resolved = []
         for element in names:
-            target = _resolve_name(m2m.target, workshop, element)
+            target = _resolve_name(m2m.target, workshop, element, m2m.extra_filter)
             if target is None:
                 summary.skipped.append(
                     SkippedRow(
@@ -201,14 +201,17 @@ def _duplicate_reason(lib, workshop, cleaned):
     return None
 
 
-def _resolve_name(target, workshop, value):
+def _resolve_name(target, workshop, value, extra_filter=None):
     """The workshop's ``target`` row named ``value``, or ``None``.
 
     Scoped to ``workshop`` (D-126): names legitimately collide across workshops,
     and the NULL-workshop system sentinels are deliberately excluded — an import
     reference resolves only against the requesting workshop's own rows.
+    ``extra_filter`` adds optional constraints to the lookup (e.g.
+    ``is_production=True`` for Station.supported_operations); a row that exists but
+    fails them resolves to ``None`` and is skipped like any other unresolved name.
     """
-    return target.objects.filter(workshop=workshop, name=value).first()
+    return target.objects.filter(workshop=workshop, name=value, **(extra_filter or {})).first()
 
 
 # --------------------------------------------------------------------------- #

@@ -224,6 +224,29 @@ def test_station_unresolvable_operation_skips_whole_row(tmp_path):
     assert not Station.objects.filter(workshop=ws).exists()  # nothing partially created
 
 
+def test_station_non_production_operation_skipped(tmp_path):
+    ws = WorkshopFactory()
+    StationCategoryFactory(workshop=ws, name="Sawing")
+    OperationTypeFactory(workshop=ws, name="Ripping", is_production=True)
+    OperationTypeFactory(workshop=ws, name="Build Planning", is_production=False)
+    _write(
+        tmp_path, "station.csv", STATION_HEADER,
+        [["Panel Saw", "Sawing", "Ripping;Build Planning", ""]],
+    )
+
+    summary = import_library("station", ws, base_dir=tmp_path)
+
+    # supported_operations is is_production=true only (operation_type/definition.md).
+    # A non-production type is reported exactly like an unresolved name — the importer
+    # doesn't distinguish "doesn't exist" from "exists but isn't a production type".
+    assert summary.imported == 0
+    reason = summary.skipped[0].reason
+    assert "operation" in reason
+    assert "Build Planning" in reason
+    assert "Op Types" in reason
+    assert not Station.objects.filter(workshop=ws).exists()  # whole row skipped
+
+
 def test_station_missing_category_reported(tmp_path):
     ws = WorkshopFactory()
     _write(tmp_path, "station.csv", STATION_HEADER, [["Panel Saw", "", "", ""]])
