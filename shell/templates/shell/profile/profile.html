@@ -18,35 +18,56 @@
     </div>
   </section>
 
-  {% comment %} 2. Personal information — identity fields read-only for every
-     role in this ticket (editing/Request-change is D3); email read-only for all;
-     phone is the owner's one self-service inline edit, no approval. {% endcomment %}
+  {% comment %} 2. Personal information — locked identity fields (first/last/DOB).
+     Non-admins see them read-only ("Admin managed") with a per-field "Request
+     change" modal that raises a ChangeRequest (D3); a pending request blocks a
+     new one (one-pending guard). An admin edits their own identity directly via
+     a mandatory-reason modal. email is read-only for everyone; phone is the
+     owner's one self-service inline edit. {% endcomment %}
   <section class="panel">
     <h2 class="profile__card-title">Personal information</h2>
 
+    {% if not is_admin and pending_cr %}
+    <div class="alert alert-info py-2 small mb-3" role="alert">
+      You have a pending change request ({{ pending_cr.code }}) — you can submit another once it's resolved.
+    </div>
+    {% endif %}
+
+    {% if is_admin %}
     <div class="profile__row">
       <div class="profile__label">First name</div>
-      <div class="profile__value">
-        {{ user.first_name|default:"—" }}
-        {% if not is_admin %}<span class="badge text-bg-light border">Admin managed</span>{% endif %}
-      </div>
+      <div class="profile__value">{{ user.first_name|default:"—" }}</div>
     </div>
-
     <div class="profile__row">
       <div class="profile__label">Last name</div>
-      <div class="profile__value">
-        {{ user.last_name|default:"—" }}
-        {% if not is_admin %}<span class="badge text-bg-light border">Admin managed</span>{% endif %}
-      </div>
+      <div class="profile__value">{{ user.last_name|default:"—" }}</div>
     </div>
-
     <div class="profile__row">
       <div class="profile__label">Date of birth</div>
+      <div class="profile__value">{{ user.date_of_birth|date:"j M Y" }}</div>
+    </div>
+    <div class="profile__row">
+      <div class="profile__label"></div>
       <div class="profile__value">
-        {{ user.date_of_birth|date:"j M Y" }}
-        {% if not is_admin %}<span class="badge text-bg-light border">Admin managed</span>{% endif %}
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#admin-identity-modal">Edit identity details</button>
       </div>
     </div>
+    {% else %}
+    {% for field in identity_fields %}
+    <div class="profile__row">
+      <div class="profile__label">{{ field.label }}</div>
+      <div class="profile__value">
+        {{ field.display|default:"—" }}
+        <span class="badge text-bg-light border">Admin managed</span>
+        {% if pending_cr %}
+        <span class="btn btn-outline-secondary btn-sm disabled ms-2" aria-disabled="true">Request change</span>
+        {% else %}
+        <button type="button" class="btn btn-outline-secondary btn-sm ms-2" data-bs-toggle="modal" data-bs-target="#cr-modal-{{ field.name }}">Request change</button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
 
     <div class="profile__row">
       <div class="profile__label">Email address</div>
@@ -109,4 +130,78 @@
   </section>
 
 </div>
+
+{% comment %} Identity-change modals. Non-admin: one "Request change" modal per
+   locked field → submit_change_request. Admin: one direct-edit modal with a
+   mandatory reason → admin_identity_edit. Rendered only when actually usable. {% endcomment %}
+{% if is_admin %}
+<div class="modal fade" id="admin-identity-modal" tabindex="-1" aria-labelledby="admin-identity-modal-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'admin_identity_edit' %}" class="modal-content">
+      {% csrf_token %}
+      <div class="modal-header">
+        <h5 class="modal-title" id="admin-identity-modal-title">Edit identity details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label small" for="{{ admin_identity_form.first_name.id_for_label }}">First name</label>
+          {{ admin_identity_form.first_name }}
+        </div>
+        <div class="mb-2">
+          <label class="form-label small" for="{{ admin_identity_form.last_name.id_for_label }}">Last name</label>
+          {{ admin_identity_form.last_name }}
+        </div>
+        <div class="mb-2">
+          <label class="form-label small" for="{{ admin_identity_form.date_of_birth.id_for_label }}">Date of birth</label>
+          {{ admin_identity_form.date_of_birth }}
+        </div>
+        <div class="mb-1">
+          <label class="form-label small" for="{{ admin_identity_form.reason.id_for_label }}">Reason</label>
+          {{ admin_identity_form.reason }}
+          <div class="form-text">Recorded with the change.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% elif not pending_cr %}
+{% for field in identity_fields %}
+<div class="modal fade" id="cr-modal-{{ field.name }}" tabindex="-1" aria-labelledby="cr-modal-{{ field.name }}-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'submit_change_request' %}" class="modal-content">
+      {% csrf_token %}
+      <input type="hidden" name="target_field" value="{{ field.name }}">
+      <div class="modal-header">
+        <h5 class="modal-title" id="cr-modal-{{ field.name }}-title">Request change · {{ field.label }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <div class="form-label small text-muted mb-1">Current value</div>
+          <div>{{ field.display|default:"—" }}</div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small" for="{{ field.form.proposed_value.id_for_label }}">{{ field.form.proposed_value.label }}</label>
+          {{ field.form.proposed_value }}
+        </div>
+        <div class="mb-1">
+          <label class="form-label small" for="{{ field.form.reason.id_for_label }}">{{ field.form.reason.label }}</label>
+          {{ field.form.reason }}
+          <div class="form-text">Why are you requesting this change?</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Submit</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
 {% endblock %}

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Change requests · Admin{% endblock %}
+
+{% comment %} Admin CR-only work queue (Slice D / D3). Lists pending identity
+   ChangeRequests in the admin's own workshop with Approve (auto-applies the
+   change) and Reject (mandatory reason). This is distinct from the WorkItem
+   Work Feed — only ChangeRequests surface here in Phase 1 (D-124). {% endcomment %}
+{% block content %}
+{% include "shell/partials/_page_header.html" with title="Change requests" subtitle="Pending identity change requests awaiting your review." %}
+
+{% if rows %}
+<div class="request-queue">
+  {% for row in rows %}
+  <div class="panel request-queue__item">
+    <div class="request-queue__head">
+      <div>
+        <span class="request-queue__code">{{ row.cr.code }}</span>
+        <span class="request-queue__requester">{{ row.cr.requested_by.get_full_name|default:row.cr.requested_by.email }}</span>
+      </div>
+      <div class="request-queue__date text-muted small">{{ row.cr.created_at|date:"j M Y" }}</div>
+    </div>
+    <div class="request-queue__body">
+      <div class="request-queue__field">{{ row.field_label }}</div>
+      <div class="request-queue__change">{{ row.current_display }} &rarr; {{ row.proposed_display }}</div>
+      <div class="request-queue__reason"><span class="text-muted small">Reason:</span> {{ row.cr.reason }}</div>
+    </div>
+    <div class="request-queue__actions">
+      <form method="post" action="{% url 'approve_change_request' row.cr.pk %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+      </form>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#reject-modal-{{ row.cr.pk }}">Reject</button>
+    </div>
+  </div>
+
+  <div class="modal fade" id="reject-modal-{{ row.cr.pk }}" tabindex="-1" aria-labelledby="reject-modal-{{ row.cr.pk }}-title" aria-hidden="true">
+    <div class="modal-dialog">
+      <form method="post" action="{% url 'reject_change_request' row.cr.pk %}" class="modal-content">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="reject-modal-{{ row.cr.pk }}-title">Reject {{ row.cr.code }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label small" for="reject-note-{{ row.cr.pk }}">Reason for rejection</label>
+          <textarea id="reject-note-{{ row.cr.pk }}" name="note" rows="2" class="form-control form-control-sm" required></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm">Reject request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="panel">
+  <p class="text-muted mb-0">No pending change requests.</p>
+</div>
+{% endif %}
+{% endblock %}

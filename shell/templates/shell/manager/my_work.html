@@ -4,7 +4,8 @@
 
 {% block content %}
 {% include "shell/partials/_page_header.html" with title="My Work" subtitle="New requests, work in progress, and manager follow-through." %}
-<div class="panel">
-  <p class="text-muted mb-0">Static shell — this page's content is delivered by its feature slice.</p>
+{% include "shell/partials/_your_requests.html" %}
+<div class="panel mt-3">
+  <p class="text-muted mb-0">The Work Feed is delivered by its feature slice.</p>
 </div>
 {% endblock %}

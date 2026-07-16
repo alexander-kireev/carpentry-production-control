@@ -14,6 +14,7 @@ from shell.views import (
     ManagerDashboardView,
     OperatorDashboardView,
     ProfileView,
+    RequesterTrackingView,
     ShellPageView,
     TechnicianDashboardView,
     debug_view_as,
@@ -54,7 +55,7 @@ urlpatterns = [
     # Manager
     path(
         "manager/my-work",
-        ShellPageView.as_view(template_name="shell/manager/my_work.html"),
+        RequesterTrackingView.as_view(template_name="shell/manager/my_work.html"),
         name="manager_my_work",
     ),
     path(
@@ -90,7 +91,7 @@ urlpatterns = [
     ),
     path(
         "operator/requests",
-        ShellPageView.as_view(template_name="shell/operator/requests.html"),
+        RequesterTrackingView.as_view(template_name="shell/operator/requests.html"),
         name="operator_requests",
     ),
     # Technician
@@ -116,7 +117,7 @@ urlpatterns = [
     ),
     path(
         "tech/requests",
-        ShellPageView.as_view(template_name="shell/technician/requests.html"),
+        RequesterTrackingView.as_view(template_name="shell/technician/requests.html"),
         name="technician_requests",
     ),
     # DEBUG-only "view as role" switcher
