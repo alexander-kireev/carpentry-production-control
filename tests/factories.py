@@ -25,6 +25,7 @@ from catalog.models import (
     Workshop,
     WorkshopRole,
 )
+from notifications.models import Notification
 
 # Known password so tests can authenticate the built users.
 DEFAULT_PASSWORD = "workshop-pass-123"
@@ -230,3 +231,26 @@ class ChangeRequestFactory(factory.django.DjangoModelFactory):
     proposed_value = "Alexander"
     reason = "Legal name change after marriage."
     # status left to the model default (pending) — the steady state; traits override.
+
+
+class NotificationFactory(factory.django.DjangoModelFactory):
+    """An unread notification (steady state) with ``read`` / ``dismissed`` traits.
+
+    ``pinned`` / ``important`` are set as direct call-site kwargs, not traits:
+    factory_boy forbids a Trait sharing a field's name, and both are plain
+    booleans, so a trait would add nothing over ``NotificationFactory(pinned=True)``.
+    ``body`` / ``source_type`` / ``source_id`` are left NULL by default.
+    """
+
+    class Meta:
+        model = Notification
+
+    class Params:
+        read = factory.Trait(status=Notification.Status.READ)
+        dismissed = factory.Trait(status=Notification.Status.DISMISSED)
+
+    recipient = factory.SubFactory(UserFactory)
+    # A representative live Phase-1 category (identity/name change).
+    category = Notification.Category.ACCOUNT
+    title = factory.Sequence(lambda n: f"Notification {n}")
+    # status left to the model default (unread) — the steady state; traits override.
