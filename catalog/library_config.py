@@ -15,7 +15,7 @@ per ``workshop/behaviour.md`` Library import).
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
@@ -169,6 +169,13 @@ class M2MField:
     within the workshop skips the whole row and is reported, naming the failing
     element (``singular``, e.g. "operation"). The relation is set after the row is
     created.
+
+    ``extra_filter`` optionally constrains each element's resolution lookup (applied
+    as ``**kwargs`` alongside ``workshop``/``name``). Empty by default — a plain M2M
+    resolves against any row of the target type; a field that opts in (e.g.
+    ``STATION.supported_operations`` with ``is_production=True``) treats a row that
+    exists but fails the constraint as unresolved, skipping + reporting it like any
+    other bad name. A general mechanism, not a Station-specific path.
     """
 
     name: str
@@ -176,6 +183,7 @@ class M2MField:
     target_label: str
     singular: str
     delimiter: str = ";"
+    extra_filter: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -397,6 +405,10 @@ STATION = LibraryType(
             target=OperationType,
             target_label="Op Types",
             singular="operation",
+            # operation_type/definition.md: Station.supported_operations references
+            # is_production=true OperationTypes only. A non-production name resolves
+            # to None and is skipped + reported like any other unresolved reference.
+            extra_filter={"is_production": True},
         ),
     ),
 )
