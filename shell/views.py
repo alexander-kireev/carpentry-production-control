@@ -7,13 +7,19 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import redirect
+from django.template.defaultfilters import date as date_filter
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
-from accounts.forms import ProfilePhoneForm
-from accounts.models import User
-from accounts.services import set_own_phone
+from accounts.forms import AdminIdentityForm, ChangeRequestForm, ProfilePhoneForm
+from accounts.models import ChangeRequest, User
+from accounts.services import (
+    IDENTITY_FIELD_LABELS,
+    IDENTITY_FIELDS,
+    describe_change_request,
+    set_own_phone,
+)
 from catalog.library_config import DISPLAY_LIBRARY_TYPES
 from shell.roles import OVERRIDE_SESSION_KEY, ROLE_LANDING, get_effective_role
 
@@ -60,15 +66,45 @@ class ProfileView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        context["is_admin"] = user.account_role == User.AccountRole.ADMIN
+        is_admin = user.account_role == User.AccountRole.ADMIN
+        context["is_admin"] = is_admin
         context.setdefault("phone_form", ProfilePhoneForm(instance=user))
+        if is_admin:
+            # Admin edits their own identity directly (D3): editable inputs in a
+            # mandatory-reason modal → accounts.admin_identity_edit.
+            context.setdefault("admin_identity_form", AdminIdentityForm(instance=user))
+        else:
+            # Non-admin: identity stays read-only, each field gaining a
+            # "Request change" modal → accounts.submit_change_request. A pending
+            # CR blocks a new submission (the one-pending guard), so surface it
+            # and disable the buttons rather than let the submit bounce back.
+            context["pending_cr"] = ChangeRequest.objects.filter(
+                requested_by=user, status=ChangeRequest.Status.PENDING
+            ).first()
+            context["identity_fields"] = [
+                {
+                    "name": name,
+                    "label": IDENTITY_FIELD_LABELS[name],
+                    "display": self._identity_display(user, name),
+                    "form": ChangeRequestForm(target_field=name, prefix=name),
+                }
+                for name in IDENTITY_FIELDS
+            ]
         return context
+
+    @staticmethod
+    def _identity_display(user, name):
+        value = getattr(user, name)
+        if name == "date_of_birth":
+            return date_filter(value, "j M Y")
+        return value
 
     def post(self, request, *args, **kwargs):
         """Persist the owner's inline phone edit — the one live write here.
 
         Post/redirect/get so a refresh doesn't resubmit; an invalid value
-        re-renders the page with the bound form's error.
+        re-renders the page with the bound form's error. The identity-change
+        writes post to their own accounts routes, not here.
         """
         form = ProfilePhoneForm(request.POST, instance=request.user)
         if form.is_valid():
@@ -76,6 +112,25 @@ class ProfileView(LoginRequiredMixin, TemplateView):
             messages.success(request, "Phone number updated.")
             return redirect(reverse("profile"))
         return self.render_to_response(self.get_context_data(phone_form=form))
+
+
+class RequesterTrackingView(LoginRequiredMixin, TemplateView):
+    """A requester's read-only "Your requests" surface (Slice D / D3).
+
+    Lists the logged-in user's own identity ChangeRequests (all statuses, newest
+    first), with the distinct "Superseded" state and any rejection note. There is
+    **no Cancel action** — a CR can't be withdrawn (system-cancellation only, per
+    the CR state machine). ``template_name`` is set per route: the operator /
+    technician Requests page and the manager Work Feed each host this section.
+    """
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        crs = ChangeRequest.objects.filter(
+            requested_by=self.request.user
+        ).order_by("-created_at")
+        context["your_requests"] = [describe_change_request(cr) for cr in crs]
+        return context
 
 
 class AnalyticsPlaceholderView(LoginRequiredMixin, TemplateView):

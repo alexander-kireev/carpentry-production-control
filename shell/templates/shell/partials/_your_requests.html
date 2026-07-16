@@ -1,0 +1,26 @@
+{% comment %} Requester's read-only "Your requests" list (Slice D / D3).
+   Expects `your_requests`: a list of describe_change_request() view-models.
+   No Cancel action — a CR can't be withdrawn (system-cancellation only). A
+   cancelled+superseded CR shows the distinct "Superseded" status and detail. {% endcomment %}
+<section class="panel">
+  <h2 class="profile__card-title">Your requests</h2>
+  {% if your_requests %}
+  <ul class="request-list">
+    {% for row in your_requests %}
+    <li class="request-list__item">
+      <div class="request-list__main">
+        <div>
+          <span class="request-list__field">{{ row.field_label }}</span>
+          <span class="request-list__change">{{ row.current_display }} &rarr; {{ row.proposed_display }}</span>
+        </div>
+        <div class="request-list__meta">{{ row.cr.code }} · submitted {{ row.cr.created_at|date:"j M Y" }}</div>
+        {% if row.detail %}<div class="request-list__detail">{{ row.detail }}</div>{% endif %}
+      </div>
+      <span class="request-status request-status--{{ row.status_label|lower }}">{{ row.status_label }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-muted mb-0">You have no change requests.</p>
+  {% endif %}
+</section>

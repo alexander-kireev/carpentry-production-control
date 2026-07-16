@@ -3,8 +3,6 @@
 {% block title %}Requests · Technician{% endblock %}
 
 {% block content %}
-{% include "shell/partials/_page_header.html" with title="Requests" subtitle="Absence, leave, and general requests." %}
-<div class="panel">
-  <p class="text-muted mb-0">Static shell — this page's content is delivered by its feature slice.</p>
-</div>
+{% include "shell/partials/_page_header.html" with title="Requests" subtitle="Track the status of your requests." %}
+{% include "shell/partials/_your_requests.html" %}
 {% endblock %}

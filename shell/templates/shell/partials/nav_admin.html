@@ -13,6 +13,10 @@
        href="{% url 'admin_workshop' %}">Workshop</a>
   </li>
   <li class="nav-item">
+    <a class="nav-link{% if request.resolver_match.url_name == 'admin_requests' %} active{% endif %}"
+       href="{% url 'admin_requests' %}">Requests</a>
+  </li>
+  <li class="nav-item">
     <a class="nav-link{% if request.resolver_match.url_name == 'admin_business' %} active{% endif %}"
        href="{% url 'admin_business' %}">Business</a>
   </li>

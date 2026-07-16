@@ -213,3 +213,122 @@ main.container {
 .profile__phone-form {
   max-width: 280px;
 }
+
+/* Change requests (Slice D / D3). Two surfaces share the vocabulary: the
+   requester's read-only "Your requests" list (.request-list) and the admin's
+   pending-CR work queue (.request-queue). A .request-status pill carries the
+   state, with a modifier per state (incl. the distinct "superseded"). */
+.request-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.request-list__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.request-list__item:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.request-list__field {
+  font-weight: 600;
+}
+
+.request-list__change {
+  margin-left: 0.5rem;
+}
+
+.request-list__meta {
+  margin-top: 0.2rem;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8rem;
+}
+
+.request-list__detail {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+}
+
+/* Status pill — neutral base, tinted per state. */
+.request-status {
+  flex-shrink: 0;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.request-status--pending {
+  background-color: #fff4e0;
+  border-color: #f0d5a8;
+  color: #8a5a00;
+}
+
+.request-status--approved {
+  background-color: #e3f2ea;
+  border-color: #b6dcc6;
+  color: #1e6b45;
+}
+
+.request-status--rejected {
+  background-color: #fbe6e6;
+  border-color: #edbcbc;
+  color: #9b2c2c;
+}
+
+.request-status--superseded {
+  background-color: #eef1f6;
+  border-color: #cfd6e2;
+  color: #47536b;
+}
+
+/* Admin CR work queue — a stack of per-request panels. */
+.request-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.request-queue__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.request-queue__code {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+.request-queue__body {
+  margin: 0.6rem 0 0.9rem;
+}
+
+.request-queue__field {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.request-queue__change {
+  margin: 0.1rem 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.request-queue__actions {
+  display: flex;
+  gap: 0.5rem;
+}

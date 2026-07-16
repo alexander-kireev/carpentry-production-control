@@ -74,11 +74,13 @@ def test_no_account_role_badge(client):
     assert user.get_account_role_display() not in content  # account role is NOT
 
 
-@pytest.mark.parametrize("role", ["admin", *NON_ADMIN_ROLES])
-def test_identity_fields_are_read_only(client, role):
-    # first/last/DOB and email display as text — no edit input carries their
-    # value (identity editing is D3; email has no edit path at all).
-    user = make_admin() if role == "admin" else UserFactory(account_role=role)
+@pytest.mark.parametrize("role", NON_ADMIN_ROLES)
+def test_identity_fields_are_read_only_for_non_admins(client, role):
+    # For non-admins, first/last/DOB display as text — the "Request change" modal
+    # carries an empty new-value input, not the current value — and email has no
+    # edit path for anyone. (Admin identity becomes directly editable in D3;
+    # that path is covered in test_change_request_workflow.py.)
+    user = UserFactory(account_role=role)
     user.first_name, user.last_name = "Jan", "Novak"
     user.save()
     client.force_login(user)
