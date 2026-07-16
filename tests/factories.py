@@ -10,8 +10,9 @@ import datetime
 from decimal import Decimal
 
 import factory
+from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import ChangeRequest, User
 from catalog.models import (
     Material,
     MaterialCategory,
@@ -176,3 +177,56 @@ class MaterialVariantFactory(factory.django.DjangoModelFactory):
     reserved = Decimal("0")
     min_threshold = Decimal("5")
     lot_sizes = factory.LazyFunction(lambda: [2])
+
+
+class ChangeRequestFactory(factory.django.DjangoModelFactory):
+    """A valid pending user-target ChangeRequest (steady state).
+
+    ``requested_by`` and ``assigned_to`` are scoped to the CR's own workshop via
+    ``SelfAttribute("..workshop")`` (the StationFactory.category pattern), so the
+    fixture is tenancy-consistent. ``target_id`` collapses onto the requester, as
+    every MVP user-target CR is self-submitted. ``code`` is left unset —
+    ``ChangeRequest.save()`` assigns the REQ-NNN business id. Resolved states are
+    opt-in traits (``approved`` / ``rejected`` / ``cancelled``).
+    """
+
+    class Meta:
+        model = ChangeRequest
+
+    class Params:
+        approved = factory.Trait(
+            status=ChangeRequest.Status.APPROVED,
+            resolution_note="Approved — change applied.",
+            resolved_at=factory.LazyFunction(timezone.now),
+        )
+        rejected = factory.Trait(
+            status=ChangeRequest.Status.REJECTED,
+            resolution_note="Rejected — please raise this with your manager first.",
+            resolved_at=factory.LazyFunction(timezone.now),
+        )
+        cancelled = factory.Trait(
+            status=ChangeRequest.Status.CANCELLED,
+            # Default cancellation cause; the deactivation cause is opt-in per test.
+            cancel_reason=ChangeRequest.CancelReason.SUPERSEDED,
+            resolved_at=factory.LazyFunction(timezone.now),
+        )
+
+    workshop = factory.SubFactory(WorkshopFactory)
+    target_type = ChangeRequest.TargetType.USER
+    # The self-submitting non-admin requester, in the CR's own workshop.
+    requested_by = factory.SubFactory(
+        UserFactory, workshop=factory.SelfAttribute("..workshop")
+    )
+    # The admin approver, in the same workshop.
+    assigned_to = factory.SubFactory(
+        UserFactory,
+        workshop=factory.SelfAttribute("..workshop"),
+        account_role=User.AccountRole.ADMIN,
+    )
+    # User-target CR collapses onto the requester (MVP): target_id == requested_by.id.
+    target_id = factory.LazyAttribute(lambda o: o.requested_by.id)
+    target_field = "first_name"
+    current_value = "Alex"
+    proposed_value = "Alexander"
+    reason = "Legal name change after marriage."
+    # status left to the model default (pending) — the steady state; traits override.
