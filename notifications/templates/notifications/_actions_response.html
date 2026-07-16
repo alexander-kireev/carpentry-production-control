@@ -1,0 +1,7 @@
+{% comment %} HTMX response for a per-item action (N2). The list region is the
+   primary swap (into #notif-list); the nav badge and — on select — the Linked
+   Context panel ride along as out-of-band swaps so they refresh without a full
+   reload. {% endcomment %}
+{% include "notifications/_list.html" %}
+{% include "notifications/_nav_badge.html" with unread_count=unread_count oob=True %}
+{% if selected %}{% include "notifications/_linked_context.html" with oob=True %}{% endif %}

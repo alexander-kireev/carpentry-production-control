@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications{% endblock %}
+
+{% comment %} Notifications page (N2). Fills the feature slice behind the former
+   shell/notifications.html placeholder. The mockup's static "Notification types"
+   legend is replaced by the live Linked Context panel and its category chips by
+   the Pinned/Important tabs (D-124 drift). Per-item actions are HTMX; the
+   page-level hx-headers carries the CSRF token (the catalog C1 idiom). Mark-all-read
+   is a plain confirm-modal POST (the D3 idiom). {% endcomment %}
+{% block content %}
+{% include "shell/partials/_page_header.html" with title="Notifications" subtitle="Your activity stream." %}
+
+<div class="notif-page" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <div class="notif-toolbar">
+    <div class="notif-tabs">
+      {% for key, label in tabs %}
+      <a class="notif-tab{% if key == filter %} notif-tab--active{% endif %}"
+         href="?filter={{ key }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn btn-outline-secondary btn-sm notif-toolbar__bulk"
+            data-bs-toggle="modal" data-bs-target="#mark-all-read-modal"
+            {% if not unread_count %}disabled{% endif %}>
+      Mark all read
+    </button>
+  </div>
+
+  <div class="notif-layout">
+    <div id="notif-list" class="notif-list">
+      {% include "notifications/_list.html" %}
+    </div>
+    {% include "notifications/_linked_context.html" %}
+  </div>
+</div>
+
+<div class="modal fade" id="mark-all-read-modal" tabindex="-1"
+     aria-labelledby="mark-all-read-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'notifications_mark_all_read' %}" class="modal-content">
+      {% csrf_token %}
+      <div class="modal-header">
+        <h5 class="modal-title" id="mark-all-read-title">Mark all notifications as read?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        This marks your {{ unread_count }} unread notification{{ unread_count|pluralize }} as
+        read. You can still mark individual notifications as unread afterwards; pinned,
+        important, and dismissed notifications are unaffected.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Mark all read</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

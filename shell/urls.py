@@ -34,11 +34,9 @@ urlpatterns = [
         ShellPageView.as_view(template_name="shell/messages.html"),
         name="messages",
     ),
-    path(
-        "notifications",
-        ShellPageView.as_view(template_name="shell/notifications.html"),
-        name="notifications",
-    ),
+    # /notifications is served by the notifications app (N2) — its list page,
+    # per-item actions, and Mark-all-read live there, keeping the bare
+    # ``notifications`` URL name the nav partials already link.
     # --- S2 role page skeletons (hollow; interiors are each slice's) ----------
     # Admin
     path(

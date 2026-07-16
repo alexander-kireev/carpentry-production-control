@@ -19,6 +19,7 @@ urlpatterns = [
     path("", include("workshop.urls")),
     path("", include("catalog.urls")),
     path("", include("accounts.urls")),
+    path("", include("notifications.urls")),
     path("health/", health, name="health"),
     path("", include("shell.urls")),
 ]

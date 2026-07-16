@@ -31,6 +31,6 @@
   </li>
   <li class="nav-item">
     <a class="nav-link{% if request.resolver_match.url_name == 'notifications' %} active{% endif %}"
-       href="{% url 'notifications' %}">Notifications</a>
+       href="{% url 'notifications' %}">Notifications{% include "notifications/_nav_badge.html" with unread_count=notifications_unread_count %}</a>
   </li>
 </ul>
