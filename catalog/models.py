@@ -1,4 +1,4 @@
-"""Workshop singleton and the nine library/reference models (D0-1).
+"""Workshop and the nine library/reference models (D0-1).
 
 This introduces the catalog: the ``Workshop`` entity plus the reference types
 the admin populates by import in Slice C. No seed rows are created here (D0-3)
@@ -16,10 +16,10 @@ from django.db import models
 
 
 class Workshop(models.Model):
-    """The workshop itself — a singleton in MVP (one row per instance).
+    """A workshop — one instance hosts many, each owned by exactly one admin (D-126).
 
-    The single-row *guard* is enforced in Slice A (registration/setup), not by a
-    DB constraint here.
+    The one-workshop-per-admin *guard* is enforced in Slice A (registration/setup),
+    per-admin at the service layer, not by a DB constraint here.
     """
 
     name = models.CharField(max_length=255)
@@ -243,8 +243,9 @@ class Station(models.Model):
         Workshop, on_delete=models.CASCADE, related_name="stations"
     )
     # Business id, format ST-NNN, system-assigned on create (see save()). The
-    # integer PK stays the internal id; this is the user-facing reference.
-    code = models.CharField(max_length=16, unique=True, blank=True)
+    # integer PK stays the internal id; this is the user-facing reference. Unique
+    # per-workshop, not globally (CHG-061) — see the (workshop, code) constraint.
+    code = models.CharField(max_length=16, blank=True)
     name = models.CharField(max_length=100)
     # Never NULL. PROTECT here; the domain's "reassign to the undefined sentinel
     # on category delete" is app-level logic in a later slice, not a DB cascade.
@@ -267,6 +268,12 @@ class Station(models.Model):
                 fields=["workshop", "name"],
                 name="uq_station_workshop_name",
             ),
+            # ST-NNN is unique within a workshop, not globally (CHG-061): two
+            # workshops may each hold their own ST-001. Mirrors uq_station_workshop_name.
+            models.UniqueConstraint(
+                fields=["workshop", "code"],
+                name="uq_station_workshop_code",
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -274,17 +281,21 @@ class Station(models.Model):
             self.code = self._next_code()
         super().save(*args, **kwargs)
 
-    @classmethod
-    def _next_code(cls) -> str:
-        """Next sequential ST-NNN from the current maximum.
+    def _next_code(self) -> str:
+        """Next sequential ST-NNN within this station's own workshop.
 
-        MVP import (Slice C) is serial, so a simple max+1 is sufficient; this is
-        not concurrency-hardened. The ``code`` unique constraint is the backstop.
+        The sequence is per-workshop (CHG-061): every workshop's first station is
+        ST-001, and the counter never reflects other workshops' stations — a global
+        counter would leak another workshop's existence/size into a user-facing id
+        (D-126 isolation). MVP import (Slice C) is serial, so a simple max+1 within
+        the workshop is sufficient; this is not concurrency-hardened, and the
+        (workshop, code) unique constraint is the backstop.
         """
         highest = 0
-        for code in cls.objects.filter(code__startswith="ST-").values_list(
-            "code", flat=True
-        ):
+        existing = Station.objects.filter(
+            workshop=self.workshop, code__startswith="ST-"
+        ).values_list("code", flat=True)
+        for code in existing:
             try:
                 highest = max(highest, int(code.rsplit("-", 1)[1]))
             except (IndexError, ValueError):

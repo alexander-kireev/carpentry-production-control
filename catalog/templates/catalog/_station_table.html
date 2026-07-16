@@ -1,0 +1,93 @@
+{% comment %} Read-only Stations table fragment (C2). Rendered on lazy-load and
+   swapped on every search / sort / filter / paginate; all compose through one
+   query string via hx-include on the toolbar (category + status filters combine).
+   Rendered after an import with `summary` set → the toast on top. {% endcomment %}
+{% if summary %}{% include "catalog/_import_toast.html" %}{% endif %}
+
+<div class="lib-toolbar d-flex flex-wrap gap-2 mb-2">
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="dir" value="{{ dir }}">
+  <input class="lib-search form-control form-control-sm" type="search" name="search"
+         value="{{ search }}" placeholder="Search stations…" autocomplete="off" style="max-width:220px"
+         hx-get="{% url 'catalog:station_table' %}"
+         hx-target="#station-table" hx-swap="innerHTML"
+         hx-trigger="input changed delay:300ms, search"
+         hx-include="closest .lib-toolbar">
+  <select class="form-select form-select-sm" name="category" style="max-width:200px" aria-label="Category"
+          hx-get="{% url 'catalog:station_table' %}"
+          hx-target="#station-table" hx-swap="innerHTML"
+          hx-trigger="change" hx-include="closest .lib-toolbar">
+    <option value="">All categories</option>
+    {% for cat in categories %}
+    <option value="{{ cat.pk }}"{% if category_filter == cat.pk|stringformat:"s" %} selected{% endif %}>{{ cat.name }}</option>
+    {% endfor %}
+  </select>
+  <select class="form-select form-select-sm" name="status" style="max-width:220px" aria-label="Status"
+          hx-get="{% url 'catalog:station_table' %}"
+          hx-target="#station-table" hx-swap="innerHTML"
+          hx-trigger="change" hx-include="closest .lib-toolbar">
+    <option value="">All statuses</option>
+    {% for value, label in statuses %}
+    <option value="{{ value }}"{% if status_filter == value %} selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+{% if page_obj.paginator.count %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle lib-table mb-2">
+    <thead>
+      <tr>
+        {% for col in columns %}
+        <th scope="col" class="text-nowrap">
+          {% if col.sortable %}
+          <a role="button" class="text-decoration-none text-reset" style="cursor:pointer"
+             hx-get="{% url 'catalog:station_table' %}{% querystring sort=col.key dir=col.next_dir page=1 %}"
+             hx-target="#station-table" hx-swap="innerHTML">{{ col.label }}{% if col.indicator %} {{ col.indicator }}{% endif %}</a>
+          {% else %}{{ col.label }}{% endif %}
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for obj in page_obj %}
+      <tr>
+        <td class="text-nowrap"><span class="text-muted small fw-semibold">{{ obj.code }}</span></td>
+        <td>{{ obj.name }}</td>
+        <td class="text-nowrap"><span class="swatch" style="background:{{ obj.category.colour }}"></span>{{ obj.category.name }}</td>
+        <td>{% for op in obj.supported_operations.all %}<span class="badge text-bg-light border me-1">{{ op.name }}</span>{% empty %}<span class="text-muted">—</span>{% endfor %}</td>
+        <td>
+          {% if obj.status == "active" %}<span class="badge text-bg-success">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "broken" %}<span class="badge text-bg-danger">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "retired" %}<span class="badge text-bg-dark">{{ obj.get_status_display }}</span>
+          {% elif obj.status == "offline" %}<span class="badge text-bg-secondary">{{ obj.get_status_display }}</span>
+          {% else %}<span class="badge text-bg-warning">{{ obj.get_status_display }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="d-flex justify-content-between align-items-center">
+  <span class="text-muted small">
+    {{ page_obj.paginator.count }} station{{ page_obj.paginator.count|pluralize }}{% if page_obj.paginator.num_pages > 1 %} · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}{% endif %}
+  </span>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="btn-group btn-group-sm" role="group" aria-label="Pagination">
+    {% if page_obj.has_previous %}
+    <a role="button" class="btn btn-outline-secondary"
+       hx-get="{% url 'catalog:station_table' %}{% querystring page=page_obj.previous_page_number %}"
+       hx-target="#station-table" hx-swap="innerHTML">Prev</a>
+    {% else %}<span class="btn btn-outline-secondary disabled" aria-disabled="true">Prev</span>{% endif %}
+    {% if page_obj.has_next %}
+    <a role="button" class="btn btn-outline-secondary"
+       hx-get="{% url 'catalog:station_table' %}{% querystring page=page_obj.next_page_number %}"
+       hx-target="#station-table" hx-swap="innerHTML">Next</a>
+    {% else %}<span class="btn btn-outline-secondary disabled" aria-disabled="true">Next</span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="text-muted text-center py-4">No records imported yet</div>
+{% endif %}

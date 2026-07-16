@@ -1,0 +1,21 @@
+name,category,supported_operations,status
+Panel Saw,Sawing,Ripping;Cross-Cutting;Cutting,
+Table Saw,Sawing,Ripping;Cross-Cutting,
+Radial Arm Saw,Sawing,Cross-Cutting,offline
+Surface Planer,Machining,Planing;Jointing,
+Thicknesser,Machining,Thicknessing,
+Spindle Moulder,Machining,Moulding;Routing,
+Mortiser,Machining,Mortising;Tenoning,
+CNC Router,CNC,Routing;Drilling;Moulding,
+Assembly Bench 1,Bench & Assembly,Assembly;Glue-Up;Fitting,
+Assembly Bench 2,Bench & Assembly,Assembly;Dowelling;Biscuit Jointing,
+Glue-Up Station,Glue-Up,Glue-Up,
+Wide Belt Sander,Sanding,Sanding,
+Orbital Sanding Bay,Sanding,Sanding,
+Spray Booth,Spray & Finishing,Spray Finishing;Lacquering;Staining,
+Finishing Bench,Spray & Finishing,Oiling;Waxing,
+Veneer Press,Veneer & Lamination,Veneering;Edge Banding,
+QC Bench,Quality Control,Quality Check,
+Packing Station,Dispatch & Packing,Packing,
+Timber Store,Storage,,
+Maintenance Bay,Maintenance,,under_maintenance

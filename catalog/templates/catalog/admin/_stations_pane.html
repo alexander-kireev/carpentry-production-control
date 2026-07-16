@@ -1,0 +1,24 @@
+{% comment %} Stations tab pane (C2) — one read-only table with an import action.
+   Fills the empty Stations pane the S2 skeleton left (via _tabs.html's optional
+   pane include). The table lazy-loads (HTMX); Import posts and swaps the table in
+   place with a summary toast. The pane-level hx-headers carries the CSRF token. {% endcomment %}
+<div hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <div class="card">
+    <div class="card-header d-flex align-items-center gap-2 py-2">
+      <span class="fw-semibold">Stations</span>
+      <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+              hx-post="{% url 'catalog:station_import' %}"
+              hx-target="#station-table" hx-swap="innerHTML"
+              hx-disabled-elt="this">
+        Import default library
+      </button>
+    </div>
+    <div class="card-body">
+      <div id="station-table"
+           hx-get="{% url 'catalog:station_table' %}"
+           hx-trigger="load" hx-swap="innerHTML">
+        <div class="text-muted small text-center py-3">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>

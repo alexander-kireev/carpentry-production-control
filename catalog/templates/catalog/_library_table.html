@@ -55,6 +55,7 @@
           {% elif col.kind == "colour" %}<span class="swatch" style="background:{{ value }}"></span><span class="text-muted small">{{ value }}</span>
           {% elif col.kind == "time" %}{{ value|time:"H:i" }}
           {% elif col.kind == "days" %}{% for d in value %}{{ d|title }}{% if not forloop.last %}, {% endif %}{% endfor %}
+          {% elif col.kind == "list" %}{% for item in value.all %}<span class="badge text-bg-light border me-1">{{ item.name }}</span>{% empty %}<span class="text-muted">—</span>{% endfor %}
           {% else %}{{ value }}{% endif %}
         </td>
         {% endwith %}{% endfor %}

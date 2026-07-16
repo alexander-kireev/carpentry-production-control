@@ -66,8 +66,9 @@ class AdminWorkshopView(ShellPageView):
     """Admin Workshop skeleton — the first consumer of ``_tabs.html``.
 
     Tab tuples are ``(id, label, pane_template)``; a ``None`` pane stays empty.
-    Slice C fills the Libraries pane (the five dependency-free types); the other
-    three panes are filled by Slices B and C2 later.
+    Slice C fills the Libraries pane (the six library-card types, WorkshopRole
+    added in C2), the Stations pane, and the Materials pane; the Users & Roles
+    pane is filled by Slice B later.
     """
 
     template_name = "shell/admin/workshop.html"
@@ -76,8 +77,8 @@ class AdminWorkshopView(ShellPageView):
         context = super().get_context_data(**kwargs)
         context["tabs"] = [
             ("users-roles", "Users & Roles", None),
-            ("stations", "Stations", None),
-            ("materials", "Materials", None),
+            ("stations", "Stations", "catalog/admin/_stations_pane.html"),
+            ("materials", "Materials", "catalog/admin/_materials_pane.html"),
             ("libraries", "Libraries", "catalog/admin/_libraries_pane.html"),
         ]
         context["libraries"] = DISPLAY_LIBRARY_TYPES

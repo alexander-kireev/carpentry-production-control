@@ -1,0 +1,112 @@
+{% comment %} Read-only Materials table fragment (C2). Grouped display: each Material
+   is a header row with its variants nested beneath it; a bare Material shows a
+   "No variants" indicator. Paginated by Material (variants never split across a
+   page). Search matches Material name OR a variant spec_label (returns the whole
+   parent). Filters — category + unit (Material-level) and Low stock (variant-level:
+   current_stock < min_threshold) — compose through one query string via hx-include.
+   Rendered after an import with `summary` set → the toast on top. {% endcomment %}
+{% if summary %}{% include "catalog/_import_toast.html" %}{% endif %}
+
+<div class="lib-toolbar d-flex flex-wrap gap-2 mb-2">
+  <input type="hidden" name="dir" value="{{ dir }}">
+  <input class="lib-search form-control form-control-sm" type="search" name="search"
+         value="{{ search }}" placeholder="Search name or spec…" autocomplete="off" style="max-width:220px"
+         hx-get="{% url 'catalog:material_table' %}"
+         hx-target="#material-table" hx-swap="innerHTML"
+         hx-trigger="input changed delay:300ms, search"
+         hx-include="closest .lib-toolbar">
+  <select class="form-select form-select-sm" name="category" style="max-width:190px" aria-label="Category"
+          hx-get="{% url 'catalog:material_table' %}"
+          hx-target="#material-table" hx-swap="innerHTML"
+          hx-trigger="change" hx-include="closest .lib-toolbar">
+    <option value="">All categories</option>
+    {% for cat in categories %}
+    <option value="{{ cat.pk }}"{% if category_filter == cat.pk|stringformat:"s" %} selected{% endif %}>{{ cat.name }}</option>
+    {% endfor %}
+  </select>
+  <select class="form-select form-select-sm" name="unit" style="max-width:170px" aria-label="Unit"
+          hx-get="{% url 'catalog:material_table' %}"
+          hx-target="#material-table" hx-swap="innerHTML"
+          hx-trigger="change" hx-include="closest .lib-toolbar">
+    <option value="">All units</option>
+    {% for u in units %}
+    <option value="{{ u.pk }}"{% if unit_filter == u.pk|stringformat:"s" %} selected{% endif %}>{{ u.name }}</option>
+    {% endfor %}
+  </select>
+  <select class="form-select form-select-sm" name="low_stock" style="max-width:160px" aria-label="Stock level"
+          hx-get="{% url 'catalog:material_table' %}"
+          hx-target="#material-table" hx-swap="innerHTML"
+          hx-trigger="change" hx-include="closest .lib-toolbar">
+    <option value="">All stock</option>
+    <option value="1"{% if low_stock == "1" %} selected{% endif %}>Low stock</option>
+  </select>
+</div>
+
+{% if page_obj.paginator.count %}
+<div class="table-responsive">
+  <table class="table table-sm align-middle lib-table mb-2">
+    <thead>
+      <tr>
+        <th scope="col" class="text-nowrap">
+          <a role="button" class="text-decoration-none text-reset" style="cursor:pointer"
+             hx-get="{% url 'catalog:material_table' %}{% if dir == 'asc' %}{% querystring dir='desc' page=1 %}{% else %}{% querystring dir='asc' page=1 %}{% endif %}"
+             hx-target="#material-table" hx-swap="innerHTML">Material {% if dir == 'asc' %}▲{% else %}▼{% endif %}</a>
+        </th>
+        <th scope="col" class="text-nowrap">Category</th>
+        <th scope="col" class="text-nowrap">Unit</th>
+        <th scope="col" class="text-nowrap">Min threshold</th>
+        <th scope="col" class="text-nowrap">Current stock</th>
+        <th scope="col" class="text-nowrap">Lot sizes</th>
+        <th scope="col" class="text-nowrap">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="table-light">
+        <td><strong>{{ row.material.name }}</strong></td>
+        <td class="text-nowrap">{{ row.material.category.name }}</td>
+        <td class="text-nowrap">{{ row.material.unit.name }}</td>
+        <td colspan="4">{% if not row.variants %}<span class="text-muted small fst-italic">No variants</span>{% endif %}</td>
+      </tr>
+      {% for v in row.variants %}
+      <tr>
+        <td class="ps-4 text-nowrap"><span class="text-muted">↳</span> <span class="font-monospace small">{{ v.spec_label }}</span></td>
+        <td></td>
+        <td></td>
+        <td>{{ v.min_threshold|floatformat:"-3" }}</td>
+        <td>{{ v.current_stock|floatformat:"-3" }}</td>
+        <td>{% for s in v.lot_sizes %}{{ s }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td>{% with st=v.stock_status %}
+          {% if st == "clear" %}<span class="badge text-bg-success">{{ st.label }}</span>
+          {% elif st == "low" %}<span class="badge text-bg-warning">{{ st.label }}</span>
+          {% else %}<span class="badge text-bg-danger">{{ st.label }}</span>{% endif %}
+        {% endwith %}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="d-flex justify-content-between align-items-center">
+  <span class="text-muted small">
+    {{ page_obj.paginator.count }} material{{ page_obj.paginator.count|pluralize }}{% if page_obj.paginator.num_pages > 1 %} · page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}{% endif %}
+  </span>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="btn-group btn-group-sm" role="group" aria-label="Pagination">
+    {% if page_obj.has_previous %}
+    <a role="button" class="btn btn-outline-secondary"
+       hx-get="{% url 'catalog:material_table' %}{% querystring page=page_obj.previous_page_number %}"
+       hx-target="#material-table" hx-swap="innerHTML">Prev</a>
+    {% else %}<span class="btn btn-outline-secondary disabled" aria-disabled="true">Prev</span>{% endif %}
+    {% if page_obj.has_next %}
+    <a role="button" class="btn btn-outline-secondary"
+       hx-get="{% url 'catalog:material_table' %}{% querystring page=page_obj.next_page_number %}"
+       hx-target="#material-table" hx-swap="innerHTML">Next</a>
+    {% else %}<span class="btn btn-outline-secondary disabled" aria-disabled="true">Next</span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="text-muted text-center py-4">No records imported yet</div>
+{% endif %}

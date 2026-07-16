@@ -1,0 +1,29 @@
+name,category,unit,spec_label,current_stock,min_threshold,lot_sizes
+European Oak Board,Hardwood,Length,25x100x2400mm,120,40,10;25;50
+European Oak Board,Hardwood,Length,25x150x2400mm,64,30,10;25
+European Oak Board,Hardwood,Length,50x200x3000mm,18,20,5;10
+American Black Walnut Board,Hardwood,Length,25x150x2400mm,22,15,5;10
+American Black Walnut Board,Hardwood,Length,32x200x3000mm,9,12,5;10
+European Beech Board,Hardwood,Length,25x100x2400mm,80,30,10;25
+Redwood Pine,Softwood,Length,22x100x3000mm,210,80,25;50;100
+Redwood Pine,Softwood,Length,47x100x3000mm,140,60,25;50
+Birch Plywood,Plywood,Sheet,12mm 2440x1220mm,55,20,5;10;25
+Birch Plywood,Plywood,Sheet,18mm 2440x1220mm,38,20,5;10;25
+Standard MDF,MDF,Sheet,9mm 2440x1220mm,44,15,5;10
+Standard MDF,MDF,Sheet,18mm 2440x1220mm,12,20,5;10;25
+Melamine Faced Chipboard,Chipboard,Sheet,18mm White 2440x1220mm,30,15,5;10
+Crown Cut Oak Veneer,Veneer,Square Metre,0.6mm,26,20,5;10
+Iron-on Oak Edging,Edging & Lipping,Roll,22mm x 50m,14,10,1;5
+PVA Wood Adhesive,Adhesives,Litre,D3 5L Tub,9,8,1;5;10
+Danish Oil,Finishes & Coatings,Litre,Clear 2.5L,16,10,1;5
+Danish Oil,Finishes & Coatings,Litre,Clear 5L,7,8,1;5
+Wood Screws,Fixings & Fasteners,Box,4x40mm,48,20,1;5;10
+Wood Screws,Fixings & Fasteners,Box,4x50mm,52,20,1;5;10
+Wood Screws,Fixings & Fasteners,Box,5x60mm,15,20,1;5;10
+Concealed Cabinet Hinge,Ironmongery,Pair,110 Degree Clip-on,180,80,10;25;50
+Beech Dowel,Dowels & Biscuits,Piece,8x40mm,900,400,100;250;500
+Beech Dowel,Dowels & Biscuits,Piece,10x50mm,420,400,100;250
+Abrasive Sanding Belt,Abrasives,Pack,120 grit,24,15,1;5
+Abrasive Sanding Belt,Abrasives,Pack,80 grit,11,15,1;5
+Two-Part Wood Filler,Fillers,Piece,,,,
+Cascamite Resin Adhesive,Adhesives,Piece,,,,
