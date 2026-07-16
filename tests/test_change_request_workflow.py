@@ -4,8 +4,8 @@ Covers submission, the one-pending guard (friendly message + DB constraint
 backstop + release), auto-apply on approval, rejection (mandatory reason +
 reason surfaced), the admin own-profile direct edit, the ``apply_identity_change``
 supersede branch (the Slice B cross-user path, exercised at the service level
-here), permission denials, cross-workshop isolation, and the "no notifications
-yet" contract.
+here), permission denials, and cross-workshop isolation. The notifications these
+services now fan out (N3) are covered in ``test_notification_triggers.py``.
 
 Runs against PostgreSQL (config.settings.test) — never SQLite; the partial
 unique constraint and its IntegrityError backstop are Postgres-level behaviour.
@@ -14,7 +14,6 @@ unique constraint and its IntegrityError backstop are Postgres-level behaviour.
 from datetime import date
 
 import pytest
-from django.apps import apps
 from django.db import IntegrityError, transaction
 
 from accounts import services
@@ -421,19 +420,3 @@ def test_admin_cannot_act_on_another_workshops_cr(client):
     assert client.post(f"/admin/requests/{cr_b.pk}/approve").status_code == 404
     cr_b.refresh_from_db()
     assert cr_b.status == ChangeRequest.Status.PENDING
-
-
-# --- no notifications yet -------------------------------------------------
-
-
-def test_workflow_creates_no_notifications():
-    """D3 ships the workflow with no notifications.
-
-    The Notification model is introduced by a later ticket (N1), and N3 is what
-    edits approve_cr / reject_cr / apply_identity_change to add notify() calls.
-    Until then there is no Notification model to count, so the contract is
-    asserted structurally: no notification app is wired, and the service module
-    exposes no notify() hook.
-    """
-    assert not apps.is_installed("notification")
-    assert not hasattr(services, "notify")
