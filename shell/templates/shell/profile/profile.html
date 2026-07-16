@@ -3,26 +3,110 @@
 {% block title %}Profile{% endblock %}
 
 {% block content %}
-<h1 class="h3 mb-1">Profile</h1>
-<p class="text-muted">Your personal information and settings.</p>
+{% include "shell/partials/_page_header.html" with title="Profile" subtitle="Your personal information and role." %}
 
-<div class="card" style="max-width: 640px;">
-  <div class="card-body">
-    <div class="d-flex align-items-center gap-3">
-      <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center"
-           style="width: 56px; height: 56px; font-size: 1.25rem;">
-        {{ user.email|first|upper }}
-      </div>
-      <div>
-        <div class="fw-bold">{{ user.email }}</div>
-        <span class="badge text-bg-secondary text-capitalize">{{ effective_role }}</span>
+<div class="profile">
+
+  {% comment %} 1. Identity — derived avatar, name, and membership line. No
+     account-role badge is shown here (D-124): Account role is not displayed on
+     Profile. {% endcomment %}
+  <section class="panel profile__identity">
+    <div class="profile__avatar" style="background:{{ user.avatar_colour }};" aria-hidden="true">{{ user.avatar_initials }}</div>
+    <div>
+      <div class="profile__name">{{ user.get_full_name|default:user.email }}</div>
+      <div class="profile__meta">Member since {{ user.date_joined|date:"M Y" }} · ID #{{ user.id|stringformat:"04d" }}</div>
+    </div>
+  </section>
+
+  {% comment %} 2. Personal information — identity fields read-only for every
+     role in this ticket (editing/Request-change is D3); email read-only for all;
+     phone is the owner's one self-service inline edit, no approval. {% endcomment %}
+  <section class="panel">
+    <h2 class="profile__card-title">Personal information</h2>
+
+    <div class="profile__row">
+      <div class="profile__label">First name</div>
+      <div class="profile__value">
+        {{ user.first_name|default:"—" }}
+        {% if not is_admin %}<span class="badge text-bg-light border">Admin managed</span>{% endif %}
       </div>
     </div>
-    <hr>
-    <p class="mb-0 text-muted">
-      Static shell — Profile content and behaviour (identity fields, change
-      requests) are delivered by Slice D.
-    </p>
-  </div>
+
+    <div class="profile__row">
+      <div class="profile__label">Last name</div>
+      <div class="profile__value">
+        {{ user.last_name|default:"—" }}
+        {% if not is_admin %}<span class="badge text-bg-light border">Admin managed</span>{% endif %}
+      </div>
+    </div>
+
+    <div class="profile__row">
+      <div class="profile__label">Date of birth</div>
+      <div class="profile__value">
+        {{ user.date_of_birth|date:"j M Y" }}
+        {% if not is_admin %}<span class="badge text-bg-light border">Admin managed</span>{% endif %}
+      </div>
+    </div>
+
+    <div class="profile__row">
+      <div class="profile__label">Email address</div>
+      <div class="profile__value">
+        {{ user.email }}
+        <span class="badge text-bg-light border">Read-only</span>
+      </div>
+    </div>
+
+    <div class="profile__row">
+      <div class="profile__label">
+        <label for="{{ phone_form.phone.id_for_label }}">Phone</label>
+      </div>
+      <div class="profile__value">
+        <form method="post" action="{% url 'profile' %}" class="profile__phone-form">
+          {% csrf_token %}
+          {{ phone_form.phone }}
+          {% if phone_form.phone.errors %}
+          <div class="text-danger small mt-1">{{ phone_form.phone.errors|join:", " }}</div>
+          {% endif %}
+          <div class="mt-2">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  {% comment %} 3. Role & skills — workshop role read-only (resolves to the
+     seeded "Admin" sentinel for admins via user.workshop_role.name; not
+     hardcoded). Non-admins also see their clearances and the inert "Request
+     clearance change" button; the ClearanceRequest workflow is Phase 2+, so the
+     button is disabled. {% endcomment %}
+  <section class="panel">
+    <h2 class="profile__card-title">Role &amp; skills</h2>
+
+    <div class="profile__row">
+      <div class="profile__label">Workshop role</div>
+      <div class="profile__value">{{ user.workshop_role.name }}</div>
+    </div>
+
+    {% if not is_admin %}
+    <div class="profile__row">
+      <div class="profile__label">Op types cleared</div>
+      <div class="profile__value">
+        <div class="profile__chips">
+          {% for clearance in user.clearances.all %}
+          <span class="profile__chip">{{ clearance.name }}</span>
+          {% empty %}
+          <span class="text-muted small">No clearances assigned.</span>
+          {% endfor %}
+        </div>
+        <div class="mt-2">
+          <span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true">Request clearance change</span>
+          <span class="text-muted small ms-2">Not available yet</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
 </div>
 {% endblock %}
