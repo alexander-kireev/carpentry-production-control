@@ -59,3 +59,26 @@ class AdminRegisterForm(forms.ModelForm):
         if commit:
             user.save()
         return user
+
+
+class ProfilePhoneForm(forms.ModelForm):
+    """The owner's inline phone edit on the Profile page (Slice D / D2).
+
+    Phone is the only freely self-editable profile field (no approval step); a
+    thin ``ModelForm`` over ``User.phone`` gives the field its ``max_length``
+    validation. Blank is allowed — clearing the number is a legitimate edit.
+    The actual write goes through ``accounts.services.set_own_phone``.
+    """
+
+    class Meta:
+        model = User
+        fields = ["phone"]
+        widgets = {
+            "phone": forms.TextInput(
+                attrs={
+                    "type": "tel",
+                    "class": "form-control form-control-sm",
+                    "placeholder": "Add a phone number",
+                }
+            ),
+        }

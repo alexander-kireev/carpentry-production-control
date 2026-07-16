@@ -2,6 +2,7 @@
 and the DEBUG-only "view as role" switcher. Static shell only — no backend."""
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponseBadRequest
@@ -10,7 +11,9 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.views.generic import TemplateView
 
+from accounts.forms import ProfilePhoneForm
 from accounts.models import User
+from accounts.services import set_own_phone
 from catalog.library_config import DISPLAY_LIBRARY_TYPES
 from shell.roles import OVERRIDE_SESSION_KEY, ROLE_LANDING, get_effective_role
 
@@ -41,9 +44,38 @@ class TechnicianDashboardView(LoginRequiredMixin, TemplateView):
 
 
 class ProfileView(LoginRequiredMixin, TemplateView):
-    """Shared, role-adaptive Profile shell (static; behaviour is Slice D)."""
+    """Shared, role-adaptive Profile page (Slice D / D2).
+
+    Renders the logged-in user's own identity, personal information (with the
+    self-service phone edit), and role & skills, adapting to whether the user is
+    the admin. Login + the workshop-setup gate run first (KI-021), so the page
+    only ever shows ``request.user``'s own data — no cross-workshop query. Role
+    adaptation keys off the real ``account_role`` (the profile is the user's own
+    record; the DEBUG "view as role" switcher is a nav preview and must not fake
+    the identity shown here).
+    """
 
     template_name = "shell/profile/profile.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        context["is_admin"] = user.account_role == User.AccountRole.ADMIN
+        context.setdefault("phone_form", ProfilePhoneForm(instance=user))
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Persist the owner's inline phone edit — the one live write here.
+
+        Post/redirect/get so a refresh doesn't resubmit; an invalid value
+        re-renders the page with the bound form's error.
+        """
+        form = ProfilePhoneForm(request.POST, instance=request.user)
+        if form.is_valid():
+            set_own_phone(request.user, form.cleaned_data["phone"])
+            messages.success(request, "Phone number updated.")
+            return redirect(reverse("profile"))
+        return self.render_to_response(self.get_context_data(phone_form=form))
 
 
 class AnalyticsPlaceholderView(LoginRequiredMixin, TemplateView):

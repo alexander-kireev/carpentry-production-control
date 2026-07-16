@@ -34,3 +34,16 @@ def register_admin(form) -> User:
         user.save()
 
     return user
+
+
+def set_own_phone(user: User, phone: str) -> User:
+    """Persist a user's self-service phone number (Slice D).
+
+    Phone is the one profile field the owner edits directly, with no approval
+    step (see User behaviour, Business rules). Request-agnostic like
+    ``register_admin`` — takes the domain value, writes only the ``phone``
+    column, and returns the user; the caller owns the HTTP/redirect concern.
+    """
+    user.phone = phone
+    user.save(update_fields=["phone"])
+    return user

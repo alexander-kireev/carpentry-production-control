@@ -8,10 +8,26 @@ migration. D0-2 completes the domain user on that foundation, adding the
 """
 
 import datetime
+import hashlib
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+
+# Palette the derived profile avatar picks from. Muted, workshop-toned colours,
+# each dark enough to carry white initials. A user is mapped to a fixed slot by
+# a stable hash of their email (see ``User.avatar_colour``), so the choice never
+# changes and needs no stored image.
+AVATAR_PALETTE = (
+    "#2f5d50",  # accent green
+    "#5b3a29",  # walnut
+    "#3d5a80",  # slate blue
+    "#6c3483",  # plum
+    "#1e6091",  # deep teal
+    "#a04000",  # burnt orange
+    "#4a5043",  # olive grey
+    "#7b241c",  # brick red
+)
 
 
 class UserManager(BaseUserManager):
@@ -113,6 +129,29 @@ class User(AbstractUser):
 
     def __str__(self) -> str:
         return self.email
+
+    @property
+    def avatar_initials(self) -> str:
+        """Two-letter initials for the derived profile avatar (MVP placeholder).
+
+        First + last initial, uppercased; falls back to the email's first
+        character when a name part is missing, so the circle is never blank.
+        Derived only — no stored image (see User definition, ``avatar``).
+        """
+        initials = f"{self.first_name[:1]}{self.last_name[:1]}".strip()
+        return (initials or self.email[:1]).upper()
+
+    @property
+    def avatar_colour(self) -> str:
+        """Deterministic background colour for the derived avatar.
+
+        A stable hash of the email maps the user to a fixed ``AVATAR_PALETTE``
+        slot, so the colour is identical on every request and across databases.
+        ``hashlib`` (not the per-process-salted built-in ``hash``) is what makes
+        it stable — a plain ``hash(str)`` would differ between processes.
+        """
+        digest = hashlib.md5(self.email.encode("utf-8")).hexdigest()
+        return AVATAR_PALETTE[int(digest, 16) % len(AVATAR_PALETTE)]
 
 
 class ChangeRequest(models.Model):

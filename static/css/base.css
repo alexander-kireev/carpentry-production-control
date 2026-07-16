@@ -122,3 +122,94 @@ main.container {
   vertical-align: middle;
   margin-right: 0.35rem;
 }
+
+/* Profile page (D2) — the self-service account view. A narrow stack of panels
+   (identity / personal information / role & skills). The avatar colour is set
+   inline because it is per-user derived data, like .swatch above. One-off
+   spacing inside the cards stays on Bootstrap utilities. */
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 640px;
+}
+
+.profile__identity {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.profile__avatar {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.profile__name {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.profile__meta {
+  margin-top: 0.15rem;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.85rem;
+}
+
+.profile__card-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.profile__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.profile__row:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.profile__label {
+  flex-shrink: 0;
+  width: 150px;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.profile__value {
+  flex: 1;
+  min-width: 200px;
+}
+
+.profile__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.profile__chip {
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 20px;
+  background-color: var(--bs-body-bg);
+  font-size: 0.8rem;
+}
+
+.profile__phone-form {
+  max-width: 280px;
+}
