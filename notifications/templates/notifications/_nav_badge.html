@@ -1,0 +1,5 @@
+{% comment %} Unread-count badge on the Notifications nav item (N2). `unread_count`
+   comes from the notifications.context_processors.unread_count context processor
+   on a full load, or is passed explicitly on an HTMX out-of-band refresh (oob=True).
+   The span always renders (so HTMX OOB can target its id) and hides at zero. Its id
+   is unique per page — base.html renders exactly one role nav. {% endcomment %}<span id="notif-nav-badge" class="badge text-bg-danger ms-1 notif-nav-badge{% if not unread_count %} d-none{% endif %}"{% if oob %} hx-swap-oob="true"{% endif %}>{{ unread_count|default:0 }}</span>

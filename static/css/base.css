@@ -332,3 +332,204 @@ main.container {
   display: flex;
   gap: 0.5rem;
 }
+
+/* Notifications page (N2). The recipient's own stream: a filter/bulk toolbar, a
+   two-column layout (list + the live Linked Context panel), and per-item rows
+   whose content selects (marks read + context) while the action buttons drive
+   the N1 transitions/flags. The mockup's category chips/legend are dropped for
+   the domain's Pinned/Important tabs + Linked Context panel (D-124). */
+.notif-nav-badge {
+  font-size: 0.7rem;
+}
+
+.notif-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.notif-toolbar__bulk {
+  margin-left: auto;
+}
+
+.notif-tabs {
+  display: flex;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.notif-tab {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color, #6c757d);
+  text-decoration: none;
+  border-left: 1px solid var(--bs-border-color);
+}
+
+.notif-tab:first-child {
+  border-left: none;
+}
+
+.notif-tab--active {
+  background-color: var(--app-accent);
+  color: #fff;
+}
+
+/* List + Linked Context panel side by side; stacks on narrow viewports. */
+.notif-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (min-width: 768px) {
+  .notif-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* A row: clickable content (select) + a sibling action cluster. */
+.notif-item {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  background-color: var(--app-panel-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--app-panel-radius);
+  padding: 0.5rem 0.75rem;
+}
+
+.notif-item--unread {
+  border-color: var(--app-accent);
+  background-color: color-mix(in srgb, var(--app-accent) 5%, var(--app-panel-bg));
+}
+
+.notif-item--selected {
+  box-shadow: 0 0 0 2px var(--app-accent);
+}
+
+.notif-item__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notif-item__marker {
+  flex-shrink: 0;
+  width: 8px;
+  padding-top: 0.45rem;
+}
+
+.notif-item__dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--app-accent);
+}
+
+.notif-item__icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.notif-item__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.notif-item__title {
+  font-weight: 600;
+}
+
+.notif-item--unread .notif-item__title {
+  font-weight: 700;
+}
+
+.notif-item__body {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.85rem;
+}
+
+.notif-item__time {
+  flex-shrink: 0;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.notif-item__actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.notif-empty {
+  text-align: center;
+}
+
+/* Linked Context panel — the live source summary (replaces the static legend). */
+.notif-context__title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.notif-context__source {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.notif-context__rows {
+  margin: 0;
+}
+
+.notif-context__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.notif-context__row:first-child {
+  border-top: none;
+}
+
+.notif-context__label {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.notif-context__value {
+  flex: 1;
+  min-width: 120px;
+  margin: 0;
+  font-size: 0.85rem;
+}

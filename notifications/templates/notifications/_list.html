@@ -1,0 +1,17 @@
+{% comment %} The notification list region for the current tab (N2). This is the
+   HTMX swap target (#notif-list innerHTML) for every per-item action, and is
+   included directly on the full page. Empty state adapts to the active tab. {% endcomment %}
+{% if notifications %}
+  {% for notification in notifications %}
+    {% include "notifications/_item.html" %}
+  {% endfor %}
+{% else %}
+  <div class="panel notif-empty">
+    <p class="text-muted mb-0">
+      {% if filter == 'unread' %}No unread notifications.
+      {% elif filter == 'pinned' %}No pinned notifications.
+      {% elif filter == 'important' %}No important notifications.
+      {% else %}You have no notifications.{% endif %}
+    </p>
+  </div>
+{% endif %}

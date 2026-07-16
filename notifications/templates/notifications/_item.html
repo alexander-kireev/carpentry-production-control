@@ -1,0 +1,45 @@
+{% comment %} One notification row (N2). The content block selects the row (marks
+   read + Linked Context); the action buttons drive the N1 transitions/flags.
+   Every action HTMX-swaps the list and OOB-refreshes the nav badge; the current
+   tab rides along as ?filter= so the re-rendered list stays on the same tab. CSRF
+   comes from the page-level hx-headers. The content and the actions are siblings
+   so a button click never also triggers the row's select. {% endcomment %}
+<div class="notif-item{% if notification.status == 'unread' %} notif-item--unread{% endif %}{% if selected.pk == notification.pk %} notif-item--selected{% endif %}">
+  <button type="button" class="notif-item__main"
+          hx-post="{% url 'notification_select' notification.pk %}?filter={{ filter }}"
+          hx-target="#notif-list" hx-swap="innerHTML">
+    <span class="notif-item__marker" aria-hidden="true">
+      {% if notification.status == 'unread' %}<span class="notif-item__dot"></span>{% endif %}
+    </span>
+    <span class="notif-item__icon" aria-hidden="true">{% if notification.category == 'cr_rejected' %}&#10007;{% elif notification.category == 'account' %}&#128100;{% else %}&#128276;{% endif %}</span>
+    <span class="notif-item__text">
+      <span class="notif-item__title">{{ notification.title }}</span>
+      {% if notification.body %}<span class="notif-item__body">{{ notification.body }}</span>{% endif %}
+    </span>
+    <span class="notif-item__time">{{ notification.created_at|timesince }} ago</span>
+  </button>
+  <div class="notif-item__actions">
+    <button type="button" class="btn btn-sm btn-outline-secondary{% if notification.pinned %} active{% endif %}"
+            hx-post="{% url 'notification_pin' notification.pk %}?filter={{ filter }}"
+            hx-target="#notif-list" hx-swap="innerHTML">
+      {% if notification.pinned %}Unpin{% else %}Pin{% endif %}
+    </button>
+    <button type="button" class="btn btn-sm btn-outline-secondary{% if notification.important %} active{% endif %}"
+            hx-post="{% url 'notification_important' notification.pk %}?filter={{ filter }}"
+            hx-target="#notif-list" hx-swap="innerHTML">
+      {% if notification.important %}Unflag{% else %}Important{% endif %}
+    </button>
+    {% if notification.status == 'unread' %}
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            hx-post="{% url 'notification_read' notification.pk %}?filter={{ filter }}"
+            hx-target="#notif-list" hx-swap="innerHTML">Mark read</button>
+    {% else %}
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            hx-post="{% url 'notification_unread' notification.pk %}?filter={{ filter }}"
+            hx-target="#notif-list" hx-swap="innerHTML">Mark unread</button>
+    {% endif %}
+    <button type="button" class="btn btn-sm btn-outline-danger"
+            hx-post="{% url 'notification_dismiss' notification.pk %}?filter={{ filter }}"
+            hx-target="#notif-list" hx-swap="innerHTML">Dismiss</button>
+  </div>
+</div>

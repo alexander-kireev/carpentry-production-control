@@ -1,0 +1,28 @@
+{% comment %} Linked Context panel (N2 / D-124 drift — replaces the mockup's static
+   type legend). A LIVE summary of the selected notification's source via N1's
+   registry (notifications.services.linked_context); the keys vary per source
+   type, so they render generically. A NULL/unregistered source resolves to no
+   rows. `oob=True` marks the HTMX out-of-band refresh emitted on select. {% endcomment %}
+<aside id="notif-context-panel" class="panel notif-context"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2 class="notif-context__title">Linked context</h2>
+  {% if selected %}
+    <p class="notif-context__source">{{ selected.title }}</p>
+    {% if context_rows %}
+      <dl class="notif-context__rows">
+        {% for label, value in context_rows %}
+        <div class="notif-context__row">
+          <dt class="notif-context__label">{{ label }}</dt>
+          <dd class="notif-context__value">{{ value }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+    {% else %}
+      <p class="text-muted mb-0">No linked context for this notification.</p>
+    {% endif %}
+    {% if base_target %}
+    <a class="btn btn-primary btn-sm mt-3" href="{% url 'notification_open' selected.pk %}">Go to source &rarr;</a>
+    {% endif %}
+  {% else %}
+    <p class="text-muted mb-0">Select a notification to see its linked context.</p>
+  {% endif %}
+</aside>
