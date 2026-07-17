@@ -15,6 +15,8 @@ from django.utils import timezone
 from accounts.models import ChangeRequest, User
 from catalog.models import WorkshopRole
 from catalog.seeds import ADMIN_ROLE_NAME
+from notifications.models import Notification
+from notifications.services import active_managers, notify
 
 
 def register_admin(form) -> User:
@@ -66,11 +68,13 @@ def set_own_phone(user: User, phone: str) -> User:
 #   apply_identity_change admin writes an identity field directly, superseding a
 #                         matching pending CR
 #
-# MVP target is the ``user`` target_type, identity fields only. No ``notify()``
-# calls anywhere here: the Notification model is introduced by N1 (a later
-# ticket in this increment) and N3 is what edits ``approve_cr`` / ``reject_cr`` /
-# ``apply_identity_change`` to add the notifications — D3 ships the workflow
-# without them.
+# MVP target is the ``user`` target_type, identity fields only. ``approve_cr`` /
+# ``reject_cr`` / ``apply_identity_change`` fan out notifications via N1's
+# ``notify()`` (wired by N3): an approved or directly-edited identity change
+# folds into the ``account`` notification (name → affected user + active
+# managers; DOB → affected user only), and a rejection sends ``cr_rejected`` to
+# the requester. Actor-silence (excluding the acting admin/editor) is applied
+# here in the caller — ``notify()`` itself is a dumb fan-out.
 
 # The identity fields a CR (or a direct admin edit) may target, and their
 # human labels for queue/tracking rendering. The valid set is target_type-
@@ -210,11 +214,53 @@ def submit_cr(requested_by: User, target_field: str, proposed_value, reason: str
         raise PendingChangeRequestError(existing.code if existing else None) from None
 
 
+# Name changes fan out to the workshop's managers as well as the affected user
+# (U-2a); a date-of-birth change goes to the affected user alone (U-2b).
+_NAME_FIELDS = ("first_name", "last_name")
+
+
+def _notify_identity_change(target_user: User, field: str, *, actor: User) -> None:
+    """Fan out the ``account`` notification for a name/DOB identity change.
+
+    The shared seam for both identity-change causes: an approved CR
+    (``approve_cr``) and a direct admin edit (``apply_identity_change``). A name
+    change reaches the affected user **plus every active manager**; a DOB change
+    reaches the affected user **only** (U-2a / U-2b). ``actor`` is always
+    excluded — actor-silence is the caller's job, since ``notify()`` is a dumb
+    fan-out — so an admin approving someone else's CR is never notified, and an
+    admin editing their **own** identity notifies only the managers (name) or no
+    one at all (DOB); a zero-recipient fan-out is a valid no-op.
+
+    ``source`` is the affected ``User`` (base target = their own Profile). The
+    title is deliberately recipient-neutral third person: the one record is
+    fanned out to both the affected user and the managers, so it must read
+    correctly for either audience — do not reword it to "Your …".
+
+    Slice B's Edit User panel inherits this behaviour for free by calling
+    ``apply_identity_change`` (actor ≠ target); it wires no notification code.
+    """
+    recipients = [target_user]
+    if field in _NAME_FIELDS:
+        recipients.extend(active_managers(target_user.workshop))
+    recipients = [user for user in recipients if user.pk != actor.pk]
+
+    field_label = IDENTITY_FIELD_LABELS.get(field, field)
+    display_name = target_user.get_full_name() or target_user.email
+    notify(
+        recipients,
+        category=Notification.Category.ACCOUNT,
+        title=f"{field_label} updated for {display_name}",
+        source=target_user,
+    )
+
+
 def approve_cr(cr: ChangeRequest, admin: User, note: str | None = None) -> ChangeRequest:
     """Approve a pending CR and auto-apply ``proposed_value`` to the target field.
 
     ``pending → approved``; the change takes effect immediately on the target
-    user, with no further admin action. (No notification — that is N3.)
+    user, with no further admin action. The applied change then folds into the
+    ``account`` notification (name → requester + active managers; DOB → requester
+    only), with the approving admin actor-silenced.
     """
     if cr.status != ChangeRequest.Status.PENDING:
         raise ChangeRequestNotPendingError()
@@ -228,6 +274,8 @@ def approve_cr(cr: ChangeRequest, admin: User, note: str | None = None) -> Chang
         cr.resolution_note = note or None
         cr.resolved_at = timezone.now()
         cr.save(update_fields=["status", "resolution_note", "resolved_at"])
+
+        _notify_identity_change(target, cr.target_field, actor=admin)
     return cr
 
 
@@ -235,17 +283,27 @@ def reject_cr(cr: ChangeRequest, admin: User, note: str) -> ChangeRequest:
     """Reject a pending CR. ``resolution_note`` is mandatory; nothing is applied.
 
     ``pending → rejected``; the reason is surfaced back to the requester on their
-    tracking surface. (No notification — that is N3.)
+    tracking surface and pushed to them as a ``cr_rejected`` notification carrying
+    the note. Only the requester is notified (the rejecting admin is not).
     """
     if cr.status != ChangeRequest.Status.PENDING:
         raise ChangeRequestNotPendingError()
     if not (note and note.strip()):
         raise ValueError("A reason is required to reject a change request.")
 
-    cr.status = ChangeRequest.Status.REJECTED
-    cr.resolution_note = note.strip()
-    cr.resolved_at = timezone.now()
-    cr.save(update_fields=["status", "resolution_note", "resolved_at"])
+    with transaction.atomic():
+        cr.status = ChangeRequest.Status.REJECTED
+        cr.resolution_note = note.strip()
+        cr.resolved_at = timezone.now()
+        cr.save(update_fields=["status", "resolution_note", "resolved_at"])
+
+        notify(
+            [cr.requested_by],
+            category=Notification.Category.CR_REJECTED,
+            title=f"Change request {cr.code} was declined",
+            body=cr.resolution_note,
+            source=cr,
+        )
     return cr
 
 
@@ -263,7 +321,10 @@ def apply_identity_change(
     edit calls it with ``actor == target_user`` (which never has a CR about itself
     to supersede), and Slice B's Edit User panel reuses it verbatim with
     ``actor != target_user`` — that is the path that triggers the supersede branch
-    live. (No notification — that is N3.)
+    live. Fans out the ``account`` notification for the change via
+    ``_notify_identity_change`` (name → target + active managers; DOB → target),
+    with ``actor`` silenced — so the admin's own-profile name edit notifies the
+    managers only, and a self-edit of DOB notifies no one.
     """
     if field not in IDENTITY_FIELDS:
         raise ValueError(f"{field!r} is not an editable identity field.")
@@ -285,6 +346,8 @@ def apply_identity_change(
             pending.cancel_reason = ChangeRequest.CancelReason.SUPERSEDED
             pending.resolved_at = timezone.now()
             pending.save(update_fields=["status", "cancel_reason", "resolved_at"])
+
+        _notify_identity_change(target_user, field, actor=actor)
     return target_user
 
 
