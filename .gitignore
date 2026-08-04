@@ -1,0 +1,47 @@
+# Private local agent instructions
+AGENTS.md
+CLAUDE.md
+.codex/
+.claude/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Django/local runtime
+db.sqlite3
+db.sqlite3-journal
+local_settings.py
+staticfiles/
+media/
+*.log
+
+# Tests, coverage, and tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
