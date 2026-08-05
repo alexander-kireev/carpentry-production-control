@@ -171,4 +171,59 @@ database-backed correctness.
 
 ## Development
 
-Development and setup instructions will be added as implementation begins.
+The local stack uses Docker Compose for both Django and PostgreSQL. Django's
+development server and the example settings below are for local development
+only; they are not a production deployment configuration.
+
+From PowerShell in the application repository, create the ignored local
+environment file, build the application image, and start both services:
+
+```powershell
+Copy-Item .env.example .env
+docker compose build app
+docker compose up
+```
+
+Do not commit `.env`. Replace its placeholder secret and password with local
+values. The application is then available at:
+
+- `http://127.0.0.1:8000/` for the rendered foundation page;
+- `http://127.0.0.1:8000/health/` for process liveness only.
+
+Run checks from a second PowerShell terminal:
+
+```powershell
+docker compose run --rm app python manage.py check
+docker compose run --rm app python manage.py migrate --noinput
+docker compose run --rm app pytest
+docker compose run --rm --no-deps app ruff check .
+docker compose run --rm --no-deps app ruff format --check .
+```
+
+The migration and test commands use PostgreSQL. There is no SQLite fallback.
+The current foundation has no product, user, authentication, administration,
+session, or domain migrations; the migration command currently has an empty
+graph and creates no product or default-contrib schema.
+
+Stop the stack without deleting its database volume:
+
+```powershell
+docker compose down
+```
+
+### Troubleshooting
+
+- If `.env` or a required setting is missing, copy `.env.example` again and
+  supply local values. Missing settings fail explicitly by variable name.
+- Correct malformed `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, or `DATABASE_PORT`
+  values. The application does not replace them with permissive defaults.
+- If port 8000 is occupied, stop the process using it before starting this
+  fixed loopback-only service.
+- If PostgreSQL is unhealthy, inspect `docker compose ps` and
+  `docker compose logs db`.
+- Changing PostgreSQL initialization credentials in `.env` does not rewrite an
+  existing named volume. Diagnose the mismatch rather than deleting data.
+- `docker compose down` preserves the named PostgreSQL volume. Deleting the
+  volume is destructive and is not a routine repair step.
+- After source or dependency-image drift, rerun `docker compose build app`.
+  Do not install project packages directly on the host as a substitute.

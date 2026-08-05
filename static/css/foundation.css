@@ -1,0 +1,33 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  background: #eef2f4;
+  color: #172126;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+}
+
+.foundation-shell {
+  width: min(32rem, calc(100% - 2rem));
+  padding: 2rem;
+  border: 1px solid #b8c5ca;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  box-shadow: 0 1rem 2rem rgb(23 33 38 / 12%);
+}
+
+.foundation-shell h1 {
+  margin-top: 0;
+}
+
+.foundation-status {
+  padding-left: 0.75rem;
+  border-left: 0.25rem solid #237a57;
+  color: #17553d;
+  font-weight: 650;
+}
