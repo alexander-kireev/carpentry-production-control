@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    name: Foundation checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18.4-trixie
+        env:
+          POSTGRES_DB: carpentry_control
+          POSTGRES_USER: carpentry
+          POSTGRES_PASSWORD: ci-only-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U carpentry -d carpentry_control"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DJANGO_SECRET_KEY: ci-only-django-secret-key
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: localhost
+      DATABASE_NAME: carpentry_control
+      DATABASE_USER: carpentry
+      DATABASE_PASSWORD: ci-only-postgres-password
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "5432"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.12.1"
+          python-version: "3.14.6"
+          enable-cache: false
+
+      - name: Install locked dependencies
+        run: uv sync --locked --no-install-project
+
+      - name: Check Django configuration
+        run: uv run --locked --no-sync python manage.py check
+
+      - name: Verify empty-database migrations
+        run: uv run --locked --no-sync python manage.py migrate --noinput
+
+      - name: Run tests
+        run: uv run --locked --no-sync pytest
+
+      - name: Run Ruff lint
+        run: uv run --locked --no-sync ruff check .
+
+      - name: Check Ruff formatting
+        run: uv run --locked --no-sync ruff format --check .
