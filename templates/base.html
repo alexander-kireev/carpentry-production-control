@@ -1,0 +1,16 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Application foundation</title>
+    <link rel="stylesheet" href="{% static 'css/foundation.css' %}">
+  </head>
+  <body>
+    <main class="foundation-shell">
+      <h1>Application foundation</h1>
+      {% include "includes/foundation_status.html" %}
+    </main>
+  </body>
+</html>
