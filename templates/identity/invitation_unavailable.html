@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Invitation unavailable · Carpentry Production Control{% endblock %}
+{% block referrer_policy %}origin{% endblock %}
+{% block content %}
+<section class="auth-card auth-card-narrow invitation-card">
+  <p class="eyebrow">Invitation</p>
+  <h1>This invitation is unavailable</h1>
+  <p>The invitation cannot be used. If you already have an account, log in. Otherwise, contact the person who invited you.</p>
+  <p><a class="button-link" href="{% url 'login' %}" rel="noreferrer">Go to Login</a></p>
+</section>
+{% endblock %}

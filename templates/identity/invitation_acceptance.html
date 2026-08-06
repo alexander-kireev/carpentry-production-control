@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Accept invitation · Carpentry Production Control{% endblock %}
+{% block referrer_policy %}origin{% endblock %}
+{% block content %}
+<section class="auth-card auth-card-narrow invitation-card">
+  <header>
+    <p class="eyebrow">Invitation</p>
+    <h1>Set your password</h1>
+    <p>Accept your permanent manager invitation.</p>
+  </header>
+  <dl class="invitation-context">
+    <div><dt>Workshop</dt><dd>{{ invite.workshop_name }}</dd></div>
+    <div><dt>Manager</dt><dd>{{ invite.candidate_name }}</dd></div>
+    <div><dt>Email</dt><dd>{{ invite.candidate_email }}</dd></div>
+  </dl>
+  <form method="post" data-submit-once novalidate>
+    {% csrf_token %}
+    <div class="field">{{ form.password.label_tag }}{{ form.password }}{{ form.password.errors }}</div>
+    <div class="field">{{ form.password_confirmation.label_tag }}{{ form.password_confirmation }}{{ form.password_confirmation.errors }}</div>
+    <button type="submit">Accept invitation</button>
+    <span class="submit-status" data-submit-status hidden role="status">Activating…</span>
+  </form>
+</section>
+{% endblock %}

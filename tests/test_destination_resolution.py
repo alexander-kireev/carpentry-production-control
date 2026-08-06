@@ -98,3 +98,21 @@ def test_pending_projection_fails_closed_when_aggregate_is_incomplete():
     assert get_pending_manager_setup(admin)["delivery_status"] == "sent"
     EmailDeliveryIntent.objects.all().delete()
     assert get_pending_manager_setup(admin) is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_acceptance_moves_both_permanent_roles_to_operational_destination():
+    from identity.commands import accept_permanent_manager_invitation
+    from tests.test_invitation_acceptance import PASSWORD, acceptance_fixture
+
+    admin, manager, _, invitation, token = acceptance_fixture()
+    accept_permanent_manager_invitation(
+        selector=str(invitation.id),
+        raw_token=token,
+        password=PASSWORD,
+        expected_generation=1,
+    )
+    assert resolve_authenticated_destination(admin).destination == Destination.DASHBOARD
+    assert (
+        resolve_authenticated_destination(manager).destination == Destination.DASHBOARD
+    )

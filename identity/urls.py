@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     dashboard,
     holding,
+    invitation_acceptance,
     login_view,
     logout_view,
     onboarding_cockpit,
@@ -12,6 +13,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "invitations/<str:selector>/<str:token>",
+        invitation_acceptance,
+        name="invitation-acceptance",
+    ),
     path("register", register, name="register"),
     path("login", login_view, name="login"),
     path("logout", logout_view, name="logout"),

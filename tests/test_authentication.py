@@ -113,3 +113,22 @@ def test_login_and_lost_response_resume_pending_cockpit(client):
     assert response.headers["Location"] == "/onboarding"
     page = client.get("/onboarding")
     assert b"Manager activation pending" in page.content
+
+
+def test_activated_manager_login_resumes_operational_handoff(client):
+    from tests.test_invitation_acceptance import acceptance_fixture
+
+    _, manager, workshop, invitation, token = acceptance_fixture()
+    from identity.commands import accept_permanent_manager_invitation
+
+    accept_permanent_manager_invitation(
+        selector=str(invitation.id),
+        raw_token=token,
+        password="Manager-valid-483!",
+        expected_generation=1,
+    )
+    response = client.post(
+        "/login", {"email": manager.email, "password": "Manager-valid-483!"}
+    )
+    assert response.headers["Location"] == "/dashboard"
+    assert workshop.users.filter(account_role="manager", status="active").count() == 1

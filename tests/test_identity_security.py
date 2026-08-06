@@ -8,8 +8,23 @@ from identity.models import ActivationCodeAttemptBucket
 from identity.security import (
     check_activation_code,
     client_ip_identity,
+    invitation_credential_shape,
     normalize_authoritative_ip,
 )
+
+
+@pytest.mark.parametrize(
+    "selector,token",
+    (
+        ("0", "x" * 43),
+        ("-1", "x" * 43),
+        ("1", "short"),
+        ("1", "x" * 129),
+        ("1", "!" * 43),
+    ),
+)
+def test_invitation_credential_shape_is_bounded(selector, token):
+    assert invitation_credential_shape(selector, token) is None
 
 
 def test_manager_invitation_token_is_high_entropy_salted_and_constant_time(monkeypatch):

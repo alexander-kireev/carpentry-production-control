@@ -58,6 +58,11 @@ a { color: #87431f; font-weight: 700; }
 .status-sent { background: #dceee1; color: #245532; }
 .status-failed { background: #f9e6e3; color: #741d1d; }
 .neutral-status { padding: .8rem 1rem; border-left: .3rem solid #687178; background: #eceff0; }
+.invitation-card { margin-inline: auto; }
+.invitation-context { display: grid; gap: .65rem; margin: 1.5rem 0; }
+.invitation-context div { padding: .8rem; border: 1px solid var(--line); background: #fff; }
+.invitation-context dt { color: var(--muted); font-size: .75rem; font-weight: 800; text-transform: uppercase; }
+.invitation-context dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
 
 @media (max-width: 40rem) {
   .public-shell { width: min(100% - 1rem, 58rem); padding: .5rem 0; }

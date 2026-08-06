@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import ipaddress
 import secrets
+import string
 from datetime import timedelta
 
 from django.conf import settings
@@ -150,6 +151,28 @@ def invitation_token_digest(raw_token, salt):
 
 
 def invitation_token_matches(raw_token, salt, expected_digest):
-    return hmac.compare_digest(
-        invitation_token_digest(raw_token, salt), expected_digest
-    )
+    try:
+        actual = invitation_token_digest(raw_token, salt)
+    except UnicodeError:
+        actual = bytes(hashlib.sha256().digest_size)
+    return hmac.compare_digest(actual, bytes(expected_digest))
+
+
+def invitation_credential_shape(selector, raw_token):
+    if (
+        not isinstance(selector, str)
+        or not selector.isascii()
+        or not selector.isdigit()
+    ):
+        return None
+    if len(selector) > 19:
+        return None
+    parsed = int(selector)
+    if parsed < 1:
+        return None
+    alphabet = frozenset(string.ascii_letters + string.digits + "-_")
+    if not isinstance(raw_token, str) or not 32 <= len(raw_token) <= 128:
+        return None
+    if any(character not in alphabet for character in raw_token):
+        return None
+    return parsed

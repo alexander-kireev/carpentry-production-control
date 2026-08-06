@@ -61,6 +61,34 @@ class LoginForm(forms.Form):
     )
 
 
+class InvitationAcceptanceForm(forms.Form):
+    password = forms.CharField(
+        strip=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+    password_confirmation = forms.CharField(
+        strip=False,
+        label="Confirm password",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+
+    def __init__(self, *args, candidate=None, **kwargs):
+        self.candidate = candidate
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned = super().clean()
+        password = cleaned.get("password")
+        if password != cleaned.get("password_confirmation"):
+            self.add_error("password_confirmation", "The passwords do not match.")
+        if password:
+            try:
+                password_validation.validate_password(password, self.candidate)
+            except forms.ValidationError as error:
+                self.add_error("password", error)
+        return cleaned
+
+
 class WorkshopCreationForm(forms.Form):
     submission_nonce = forms.CharField(widget=forms.HiddenInput)
     expected_user_version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)
