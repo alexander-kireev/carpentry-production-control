@@ -72,7 +72,7 @@ def test_sb01_apps_and_custom_user_are_configured():
         settings.INSTALLED_APPS
     )
     assert settings.AUTH_USER_MODEL == "identity.User"
-    assert settings.AUTHENTICATION_BACKENDS == []
+    assert settings.AUTHENTICATION_BACKENDS == ["identity.backends.EmailBackend"]
     assert settings.SILENCED_SYSTEM_CHECKS == ["auth.W004"]
 
 
@@ -84,6 +84,17 @@ def test_session_and_authentication_middleware_are_ordered():
         "django.contrib.auth.middleware.AuthenticationMiddleware"
     )
     assert session_index < authentication_index
+    csrf_index = settings.MIDDLEWARE.index("django.middleware.csrf.CsrfViewMiddleware")
+    guard_index = settings.MIDDLEWARE.index(
+        "identity.middleware.PreWorkshopAccessMiddleware"
+    )
+    assert session_index < csrf_index < authentication_index < guard_index
+
+
+def test_registration_security_settings_default_fail_closed():
+    assert hasattr(settings, "ADMIN_REGISTRATION_ACTIVATION_CODE")
+    assert hasattr(settings, "ADMIN_REGISTRATION_IP_HMAC_KEY")
+    assert hasattr(settings, "ADMIN_REGISTRATION_IP_HMAC_KEY_VERSION")
 
 
 def test_canonical_password_validators_are_configured():

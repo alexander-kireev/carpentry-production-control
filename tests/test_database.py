@@ -25,3 +25,19 @@ def test_canonical_tables_exist_without_default_auth_user():
 
     assert {"workshop", "workshop_role", "operation_type", "user_account"} <= tables
     assert "auth_user" not in tables
+
+
+@pytest.mark.django_db
+def test_sb02_tables_exist():
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT tablename FROM pg_tables WHERE schemaname='public' "
+            "AND tablename IN ('registration_command_receipt', "
+            "'activation_code_attempt_bucket') ORDER BY tablename"
+        )
+        assert [row[0] for row in cursor.fetchall()] == [
+            "activation_code_attempt_bucket",
+            "registration_command_receipt",
+        ]

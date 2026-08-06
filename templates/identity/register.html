@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Register | Carpentry Production Control{% endblock %}
+{% block content %}
+<section class="auth-card" aria-labelledby="register-title">
+  <header><p class="eyebrow">Workshop administration</p><h1 id="register-title">Create your account</h1><p>Register the permanent administrator. Workshop setup follows next.</p></header>
+  {% if generic_error %}<div class="form-status" role="alert" aria-live="polite">{{ generic_error }}</div>{% elif form.non_field_errors %}<div class="form-status" role="alert" aria-live="polite">{{ form.non_field_errors }}</div>{% endif %}
+  <form method="post" novalidate data-submit-once>
+    {% csrf_token %}
+    {{ form.submission_nonce }}
+    <div class="form-grid">
+      <div class="field"><label for="id_first_name">First name</label>{{ form.first_name }}{{ form.first_name.errors }}</div>
+      <div class="field"><label for="id_last_name">Last name</label>{{ form.last_name }}{{ form.last_name.errors }}</div>
+      <div class="field"><label for="id_date_of_birth">Date of birth</label>{{ form.date_of_birth }}{{ form.date_of_birth.errors }}</div>
+      <div class="field"><label for="id_email">Email address</label>{{ form.email }}{{ form.email.errors }}</div>
+      <div class="field"><label for="id_password">Password</label>{{ form.password }}{{ form.password.errors }}<small>Use at least 10 characters.</small></div>
+      <div class="field"><label for="id_password_confirmation">Confirm password</label>{{ form.password_confirmation }}{{ form.password_confirmation.errors }}</div>
+      <div class="field field-wide"><label for="id_activation_code">Development activation code</label>{{ form.activation_code }}{{ form.activation_code.errors }}<small id="code-help">Codes are checked securely and are never shown again.</small></div>
+    </div>
+    <button type="submit">Register</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Creating your account…</span>
+  </form>
+  <p class="sibling-link">Already registered? <a href="{% url 'login' %}">Sign in</a></p>
+</section>
+{% endblock %}

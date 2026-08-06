@@ -131,3 +131,60 @@ class User(AbstractBaseUser):
     def save(self, *args, **kwargs):
         self.email = self.__class__.objects.normalize_email(self.email)
         super().save(*args, **kwargs)
+
+
+class RegistrationCommandReceipt(models.Model):
+    idempotency_key = models.TextField(unique=True)
+    fingerprint_version = models.SmallIntegerField()
+    payload_fingerprint = models.BinaryField()
+    result_user = models.OneToOneField(
+        User,
+        on_delete=models.RESTRICT,
+        related_name="registration_receipt",
+        db_constraint=False,
+    )
+    created_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+
+    class Meta:
+        db_table = "registration_command_receipt"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(fingerprint_version__gt=0),
+                name="cst_669_registration_fingerprint_version_positive",
+            )
+        ]
+
+
+class ActivationCodeAttemptBucket(models.Model):
+    hmac_key_version = models.SmallIntegerField()
+    client_ip_hmac = models.BinaryField()
+    window_started_at = models.DateTimeField()
+    failed_attempt_count = models.SmallIntegerField()
+    updated_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+
+    class Meta:
+        db_table = "activation_code_attempt_bucket"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(hmac_key_version__gt=0),
+                name="cst_679_activation_hmac_version_positive",
+            ),
+            models.UniqueConstraint(
+                fields=("hmac_key_version", "client_ip_hmac"),
+                name="cst_680_activation_bucket_identity_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(failed_attempt_count__gte=0)
+                & models.Q(failed_attempt_count__lte=5),
+                name="cst_681_activation_failure_count_range",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(updated_at__gte=models.F("window_started_at")),
+                name="cst_681_activation_timestamps_ordered",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("window_started_at",), name="idx_124_activation_window"
+            )
+        ]

@@ -316,3 +316,16 @@ def test_no_later_slice_tables_exist():
     assert "user_invitation" not in tables
     assert "event" not in tables
     assert "notification" not in tables
+
+
+def test_sb02_migration_is_additive_and_reversible_sql():
+    from importlib import import_module
+
+    migration = import_module("identity.migrations.0003_registration_access")
+    assert (
+        "CREATE TRIGGER cst_669_registration_receipt_immutable" in migration.FORWARD_SQL
+    )
+    assert (
+        "DROP FUNCTION IF EXISTS public.sb02_registration_receipt_immutable"
+        in migration.REVERSE_SQL
+    )

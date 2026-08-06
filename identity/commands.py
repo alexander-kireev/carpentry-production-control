@@ -1,0 +1,117 @@
+import logging
+from importlib import import_module
+
+from django.conf import settings
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import AnonymousUser
+from django.db import IntegrityError, transaction
+
+from .forms import RegistrationForm
+from .models import RegistrationCommandReceipt, User
+from .results import CommandResult, ResultCode
+from .security import check_activation_code, registration_payload_fingerprint
+
+logger = logging.getLogger("identity")
+BACKEND = "identity.backends.EmailBackend"
+
+
+def register_administrator(*, data, remote_addr, idempotency_key):
+    if not check_activation_code(data.get("activation_code"), remote_addr):
+        return CommandResult(ResultCode.REGISTRATION_UNAVAILABLE)
+
+    form = RegistrationForm(data)
+    if not form.is_valid():
+        return CommandResult(
+            ResultCode.VALIDATION_ERROR, errors=form.errors.get_json_data()
+        )
+
+    values = form.cleaned_data
+    fingerprint = registration_payload_fingerprint(
+        first_name=values["first_name"],
+        last_name=values["last_name"],
+        date_of_birth=values["date_of_birth"],
+        email=values["email"],
+    )
+    if not idempotency_key:
+        return CommandResult(ResultCode.REGISTRATION_UNAVAILABLE)
+
+    try:
+        with transaction.atomic():
+            receipt = (
+                RegistrationCommandReceipt.objects.select_related("result_user")
+                .filter(idempotency_key=idempotency_key)
+                .first()
+            )
+            if receipt is not None:
+                if (
+                    receipt.fingerprint_version == 1
+                    and bytes(receipt.payload_fingerprint) == fingerprint
+                    and receipt.result_user.check_password(values["password"])
+                ):
+                    return CommandResult(ResultCode.SUCCESS, user=receipt.result_user)
+                return CommandResult(ResultCode.REGISTRATION_UNAVAILABLE)
+
+            user = User.objects.create_user(
+                email=values["email"],
+                password=values["password"],
+                first_name=values["first_name"],
+                last_name=values["last_name"],
+                date_of_birth=values["date_of_birth"],
+                account_role=User.AccountRole.ADMIN,
+                status=User.Status.ACTIVE,
+                onboarding_state=User.OnboardingState.REGISTERED_NO_WORKSHOP,
+                workshop=None,
+                workshop_role=None,
+                version=1,
+            )
+            RegistrationCommandReceipt.objects.create(
+                idempotency_key=idempotency_key,
+                fingerprint_version=1,
+                payload_fingerprint=fingerprint,
+                result_user=user,
+            )
+            return CommandResult(ResultCode.SUCCESS, user=user)
+    except IntegrityError:
+        receipt = (
+            RegistrationCommandReceipt.objects.select_related("result_user")
+            .filter(idempotency_key=idempotency_key)
+            .first()
+        )
+        if (
+            receipt is not None
+            and receipt.fingerprint_version == 1
+            and bytes(receipt.payload_fingerprint) == fingerprint
+            and receipt.result_user.check_password(values["password"])
+        ):
+            return CommandResult(ResultCode.SUCCESS, user=receipt.result_user)
+        return CommandResult(ResultCode.REGISTRATION_UNAVAILABLE)
+
+
+def authenticate_user(request, *, email, password):
+    user = authenticate(request, email=email, password=password)
+    if user is None:
+        return CommandResult(ResultCode.AUTHENTICATION_FAILED)
+    return CommandResult(ResultCode.SUCCESS, user=user)
+
+
+def establish_session(request, user):
+    try:
+        login(request, user, backend=BACKEND)
+        request.session.save()
+        return CommandResult(ResultCode.SUCCESS, user=user)
+    except Exception:
+        engine = import_module(settings.SESSION_ENGINE)
+        request.session = engine.SessionStore()
+        request.session.modified = False
+        request.session.accessed = False
+        request.user = AnonymousUser()
+        logger.error(
+            "Identity session establishment failed",
+            extra={"operation": "identity.session.establish", "result_code": "failed"},
+        )
+        return CommandResult(ResultCode.SESSION_FAILED, user=user)
+
+
+def end_session(request):
+    logout(request)
+    return CommandResult(ResultCode.SUCCESS)

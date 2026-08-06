@@ -227,3 +227,20 @@ docker compose down
   volume is destructive and is not a routine repair step.
 - After source or dependency-image drift, rerun `docker compose build app`.
   Do not install project packages directly on the host as a substitute.
+# Carpentry Production Control
+
+Public identity entry points are `/register` and `/login`; `/logout` accepts
+CSRF-protected POST requests only. Successful registration and Login derive the
+next route from current account state. Until the next onboarding ticket, an
+unattached administrator is redirected to `/onboarding/workshop` without a
+temporary Workshop page.
+
+Registration requires three deployment values:
+`ADMIN_REGISTRATION_ACTIVATION_CODE`,
+`ADMIN_REGISTRATION_IP_HMAC_KEY`, and a positive
+`ADMIN_REGISTRATION_IP_HMAC_KEY_VERSION`. The code and HMAC key must be
+independent secrets and must not be committed.
+
+Migration, race and manual QA checks use uniquely named disposable PostgreSQL
+databases. The ordinary development database must not be migrated without
+separate approval.

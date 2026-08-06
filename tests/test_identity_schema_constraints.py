@@ -345,3 +345,59 @@ def test_concurrent_permanent_manager_anchor_has_one_committed_winner():
             "DELETE FROM user_account WHERE workshop_id = %s", (workshop_id,)
         )
         cleanup.execute("DELETE FROM workshop WHERE id = %s", (workshop_id,))
+
+
+@pytest.mark.django_db(transaction=True)
+def test_registration_receipt_is_immutable_and_restricts_user_delete():
+    from datetime import date
+
+    from django.db import DatabaseError, connection, transaction
+
+    from identity.models import RegistrationCommandReceipt, User
+
+    user = User.objects.create_user(
+        email="receipt@example.test",
+        password="valid-password-483!",
+        first_name="Receipt",
+        last_name="Owner",
+        date_of_birth=date(1990, 1, 1),
+        account_role="admin",
+        status="active",
+        onboarding_state="registered_no_workshop",
+    )
+    receipt = RegistrationCommandReceipt.objects.create(
+        idempotency_key="receipt-key",
+        fingerprint_version=1,
+        payload_fingerprint=b"f" * 32,
+        result_user=user,
+    )
+    with pytest.raises(DatabaseError), transaction.atomic():
+        RegistrationCommandReceipt.objects.filter(pk=receipt.pk).update(
+            fingerprint_version=2
+        )
+    with pytest.raises(DatabaseError), transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM user_account WHERE id=%s", [user.pk])
+
+
+@pytest.mark.django_db
+def test_sb02_physical_types_constraints_and_index():
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name='activation_code_attempt_bucket' ORDER BY ordinal_position"
+        )
+        assert cursor.fetchall() == [
+            ("id", "bigint"),
+            ("hmac_key_version", "smallint"),
+            ("client_ip_hmac", "bytea"),
+            ("window_started_at", "timestamp with time zone"),
+            ("failed_attempt_count", "smallint"),
+            ("updated_at", "timestamp with time zone"),
+        ]
+        cursor.execute(
+            "SELECT 1 FROM pg_indexes WHERE indexname='idx_124_activation_window'"
+        )
+        assert cursor.fetchone() == (1,)

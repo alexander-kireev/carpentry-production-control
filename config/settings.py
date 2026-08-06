@@ -48,6 +48,17 @@ def _parse_port(name):
     return port
 
 
+def _optional_positive_int(name):
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    return parsed if 0 < parsed <= 32767 else None
+
+
 SECRET_KEY = _required("DJANGO_SECRET_KEY")
 DEBUG = _parse_bool("DJANGO_DEBUG")
 ALLOWED_HOSTS = _parse_hosts("DJANGO_ALLOWED_HOSTS")
@@ -65,13 +76,25 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "identity.middleware.PreWorkshopAccessMiddleware",
     "django.middleware.common.CommonMiddleware",
 ]
 
 AUTH_USER_MODEL = "identity.User"
-AUTHENTICATION_BACKENDS = []
+AUTHENTICATION_BACKENDS = ["identity.backends.EmailBackend"]
 SILENCED_SYSTEM_CHECKS = ["auth.W004"]
+
+ADMIN_REGISTRATION_ACTIVATION_CODE = os.environ.get(
+    "ADMIN_REGISTRATION_ACTIVATION_CODE", ""
+).strip()
+ADMIN_REGISTRATION_IP_HMAC_KEY = os.environ.get(
+    "ADMIN_REGISTRATION_IP_HMAC_KEY", ""
+).strip()
+ADMIN_REGISTRATION_IP_HMAC_KEY_VERSION = _optional_positive_int(
+    "ADMIN_REGISTRATION_IP_HMAC_KEY_VERSION"
+)
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -136,6 +159,11 @@ LOGGING = {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
-        }
+        },
+        "identity": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }

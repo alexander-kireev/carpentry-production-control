@@ -4,13 +4,34 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Application foundation</title>
+    <title>{% block title %}Carpentry Production Control{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/foundation.css' %}">
   </head>
   <body>
-    <main class="foundation-shell">
-      <h1>Application foundation</h1>
-      {% include "includes/foundation_status.html" %}
+    <main class="public-shell">
+      <div class="brand" aria-label="Carpentry Production Control">CPC</div>
+      {% block content %}{% endblock %}
     </main>
+    <script>
+      document.querySelectorAll("form[data-submit-once]").forEach((form) => {
+        form.addEventListener("submit", (event) => {
+          if (form.dataset.submitted === "true") {
+            event.preventDefault();
+            return;
+          }
+          form.dataset.submitted = "true";
+          form.setAttribute("aria-busy", "true");
+          const button = form.querySelector('button[type="submit"]');
+          const status = form.querySelector("[data-submit-status]");
+          if (button) {
+            button.disabled = true;
+            button.setAttribute("aria-disabled", "true");
+          }
+          if (status) {
+            status.hidden = false;
+          }
+        });
+      });
+    </script>
   </body>
 </html>

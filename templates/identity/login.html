@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Sign in | Carpentry Production Control{% endblock %}
+{% block content %}
+<section class="auth-card auth-card-narrow" aria-labelledby="login-title">
+  <header><p class="eyebrow">Welcome back</p><h1 id="login-title">Sign in</h1><p>Use your account email and password.</p></header>
+  {% if generic_error %}<div class="form-status" role="alert" aria-live="polite">{{ generic_error }}</div>{% elif form.non_field_errors %}<div class="form-status" role="alert" aria-live="polite">{{ form.non_field_errors }}</div>{% endif %}
+  <form method="post" novalidate data-submit-once>
+    {% csrf_token %}
+    <div class="field"><label for="id_email">Email address</label>{{ form.email }}{{ form.email.errors }}</div>
+    <div class="field"><label for="id_password">Password</label>{{ form.password }}{{ form.password.errors }}</div>
+    <button type="submit">Sign in</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Signing in…</span>
+  </form>
+  <p class="sibling-link">Need an account? <a href="{% url 'register' %}">Register</a></p>
+</section>
+{% endblock %}

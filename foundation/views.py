@@ -3,7 +3,9 @@
 import logging
 
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect
+
+from identity.queries import resolve_authenticated_destination
 
 logger = logging.getLogger("foundation")
 
@@ -13,7 +15,8 @@ def root(request):
         "Foundation page served",
         extra={"operation": "foundation.root", "result_code": "ok"},
     )
-    return render(request, "base.html")
+    result = resolve_authenticated_destination(request.user)
+    return redirect(result.destination.value)
 
 
 def health(request):
