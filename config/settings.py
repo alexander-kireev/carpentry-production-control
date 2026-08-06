@@ -53,13 +53,36 @@ DEBUG = _parse_bool("DJANGO_DEBUG")
 ALLOWED_HOSTS = _parse_hosts("DJANGO_ALLOWED_HOSTS")
 
 INSTALLED_APPS = [
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "django.contrib.sessions",
     "django.contrib.staticfiles",
     "foundation.apps.FoundationConfig",
+    "workshops.apps.WorkshopsConfig",
+    "identity.apps.IdentityConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.middleware.common.CommonMiddleware",
+]
+
+AUTH_USER_MODEL = "identity.User"
+AUTHENTICATION_BACKENDS = []
+SILENCED_SYSTEM_CHECKS = ["auth.W004"]
+
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 10},
+    },
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 ROOT_URLCONF = "config.urls"
