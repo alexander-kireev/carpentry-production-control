@@ -63,6 +63,9 @@ jobs:
       - name: Verify empty-database migrations
         run: uv run --locked --no-sync python manage.py migrate --noinput
 
+      - name: Verify Event intent processor discovery
+        run: uv run --locked --no-sync python manage.py process_event_notification_intents --limit 10
+
       - name: Run tests
         run: uv run --locked --no-sync pytest
 

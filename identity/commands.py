@@ -8,6 +8,8 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from events.models import Event
+from events.producer import EventSpec, produce_events
 from workshops.models import OperationType, Workshop
 from workshops.protected_configuration import (
     ProtectedConfigurationError,
@@ -21,6 +23,7 @@ from .forms import (
     PermanentManagerInvitationForm,
     RegistrationForm,
     WorkshopCreationForm,
+    WorkshopTimezoneCorrectionForm,
 )
 from .models import (
     EmailDeliveryIntent,
@@ -143,6 +146,103 @@ def establish_session(request, user):
 def end_session(request):
     logout(request)
     return CommandResult(ResultCode.SUCCESS)
+
+
+def correct_workshop_timezone(*, actor_id, data, idempotency_key, fault_after=None):
+    form = WorkshopTimezoneCorrectionForm(data)
+    if not form.is_valid():
+        return CommandResult(
+            ResultCode.VALIDATION_ERROR, errors=form.errors.get_json_data()
+        )
+    if not idempotency_key:
+        return CommandResult(ResultCode.TIMEZONE_UNAVAILABLE)
+    values = form.cleaned_data
+    discovered = User.objects.filter(pk=actor_id).values("workshop_id").first()
+    if discovered is None or discovered["workshop_id"] is None:
+        return CommandResult(ResultCode.TIMEZONE_UNAVAILABLE)
+    try:
+        with transaction.atomic():
+            workshop = Workshop.objects.select_for_update().get(
+                pk=discovered["workshop_id"]
+            )
+            actor = User.objects.select_for_update().get(pk=actor_id)
+            protected = resolve_protected_configuration()
+            exact_admin = (
+                actor.workshop_id == workshop.id
+                and actor.workshop_role_id == protected.admin_role.id
+                and actor.account_role == User.AccountRole.ADMIN
+                and actor.status == User.Status.ACTIVE
+                and actor.onboarding_state is None
+            )
+            if not exact_admin:
+                return CommandResult(ResultCode.TIMEZONE_UNAVAILABLE)
+            if workshop.timezone_correction_idempotency_key is not None:
+                if workshop.timezone_correction_idempotency_key != idempotency_key:
+                    return CommandResult(ResultCode.ALREADY_ADVANCED, user=actor)
+                event = Event.objects.filter(
+                    event_type="WORKSHOP_TIMEZONE_CHANGED",
+                    idempotency_key=idempotency_key,
+                    primary_subject_type="workshop",
+                    primary_subject_id=workshop.id,
+                    actor_user_id=actor.id,
+                ).first()
+                if event is None:
+                    return CommandResult(ResultCode.TIMEZONE_UNAVAILABLE)
+                return CommandResult(ResultCode.REPLAY, user=actor, workshop=workshop)
+            if workshop.status not in {
+                Workshop.Status.MANAGER_REQUIRED,
+                Workshop.Status.MANAGER_ACTIVATION_PENDING,
+            }:
+                return CommandResult(ResultCode.ALREADY_ADVANCED, user=actor)
+            if workshop.version != values["expected_workshop_version"]:
+                return CommandResult(ResultCode.STALE, user=actor, workshop=workshop)
+            if workshop.timezone == values["timezone"]:
+                return CommandResult(ResultCode.TIMEZONE_UNAVAILABLE, user=actor)
+            old_timezone = workshop.timezone
+            workshop.timezone = values["timezone"]
+            workshop.version += 1
+            workshop.timezone_correction_idempotency_key = idempotency_key
+            workshop.save(
+                update_fields=(
+                    "timezone",
+                    "version",
+                    "timezone_correction_idempotency_key",
+                )
+            )
+            if fault_after == "workshop":
+                raise RuntimeError("timezone correction fault after Workshop")
+            events = produce_events(
+                [
+                    EventSpec(
+                        event_type="WORKSHOP_TIMEZONE_CHANGED",
+                        occurred_at=timezone.now(),
+                        actor_type="user",
+                        actor_user_id=actor.id,
+                        primary_subject_type="workshop",
+                        primary_subject_id=workshop.id,
+                        payload={
+                            "old_timezone": old_timezone,
+                            "new_timezone": workshop.timezone,
+                        },
+                        idempotency_key=idempotency_key,
+                    )
+                ]
+            )
+            if fault_after == "event":
+                raise RuntimeError("timezone correction fault after Event")
+            if fault_after == "intent":
+                assert events[0].notification_intent.pk
+                raise RuntimeError("timezone correction fault after intent")
+            return CommandResult(ResultCode.SUCCESS, user=actor, workshop=workshop)
+    except IntegrityError, ProtectedConfigurationError, User.DoesNotExist:
+        logger.error(
+            "Workshop timezone correction unavailable",
+            extra={
+                "operation": "identity.workshop.timezone.correct",
+                "result_code": "failed",
+            },
+        )
+        return CommandResult(ResultCode.TIMEZONE_UNAVAILABLE)
 
 
 def _workshop_result_is_exact(receipt, user, admin_role):

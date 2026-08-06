@@ -18,4 +18,5 @@
   </dl>
   {% if setup.delivery_status == "failed" %}<div class="form-status" role="status">The invitation is saved, but delivery failed. Recovery controls will be available in a later setup step.</div>{% elif setup.delivery_status == "pending" %}<p class="neutral-status" role="status">Delivery is pending. The invitation remains safely saved.</p>{% else %}<p class="success-status" role="status">The email provider accepted the invitation for delivery. Inbox delivery is not yet confirmed.</p>{% endif %}
 </section>
+{% include "onboarding/_timezone_correction.html" %}
 {% endblock %}

@@ -17,6 +17,7 @@ class ResultCode(StrEnum):
     DELIVERY_SENT = "delivery_sent"
     DELIVERY_FAILED = "delivery_failed"
     DELIVERY_NOOP = "delivery_noop"
+    TIMEZONE_UNAVAILABLE = "timezone_unavailable"
 
 
 class Destination(StrEnum):

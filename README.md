@@ -1,5 +1,17 @@
 # Carpentry Production Control
 
+## Event notification intent processing
+
+Run a finite local batch after migrations with:
+
+```shell
+python manage.py process_event_notification_intents --limit 100
+```
+
+The command claims pending work safely across concurrent PostgreSQL workers,
+resolves recipients from current tenant-scoped truth, and exits. A production
+scheduler or continuously running worker is deliberately not included yet.
+
 A workshop management system for coordinating custom orders, production work,
 people, stations, materials, and shop-floor activity.
 

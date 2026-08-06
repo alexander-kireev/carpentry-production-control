@@ -308,7 +308,7 @@ def test_direct_inserts_receive_canonical_database_defaults():
         assert user_version == 1
 
 
-def test_only_current_slice_identity_tables_exist():
+def test_only_current_slice_identity_and_event_boundary_tables_exist():
     tables = set(connection.introspection.table_names())
     assert "user_account" in tables
     assert "auth_user" not in tables
@@ -316,8 +316,7 @@ def test_only_current_slice_identity_tables_exist():
     assert "user_invitation" in tables
     assert "email_delivery_intent" in tables
     assert "manager_invitation_command_receipt" in tables
-    assert "event" not in tables
-    assert "notification" not in tables
+    assert {"event", "event_notification_intent", "notification"} <= tables
 
 
 def test_sb02_migration_is_additive_and_reversible_sql():
@@ -357,3 +356,16 @@ def test_sb04_migration_is_additive_and_reversible_sql():
         "DROP FUNCTION IF EXISTS public.sb04_manager_receipt_guard"
         in migration.REVERSE_SQL
     )
+
+
+def test_sb05_migration_has_sequence_and_event_immutability_guard():
+    migration = importlib.import_module(
+        "events.migrations.0001_event_notification_boundary"
+    )
+    sql = "\n".join(
+        operation.sql
+        for operation in migration.Migration.operations
+        if hasattr(operation, "sql")
+    )
+    assert "CREATE SEQUENCE event_sequence_number_seq" in sql
+    assert "CREATE TRIGGER trg_event_immutable" in sql

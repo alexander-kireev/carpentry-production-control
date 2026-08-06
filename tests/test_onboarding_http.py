@@ -179,3 +179,26 @@ def test_manager_post_requires_csrf(client):
     secure = Client(enforce_csrf_checks=True)
     secure.force_login(user)
     assert secure.post("/onboarding/manager", {}).status_code == 403
+
+
+def test_timezone_control_corrects_once_without_hiding_manager_flow(client):
+    user = admin()
+    _create_workshop(client, user)
+    page = client.get("/onboarding/manager")
+    timezone_form = page.context["timezone_form"]
+    response = client.post(
+        "/onboarding/manager",
+        {
+            "timezone_action": "correct",
+            "submission_nonce": timezone_form.initial["submission_nonce"],
+            "expected_workshop_version": timezone_form.initial[
+                "expected_workshop_version"
+            ],
+            "timezone": "Europe/Paris",
+        },
+    )
+    assert response.headers["Location"] == "/onboarding/manager"
+    refreshed = client.get("/onboarding/manager")
+    assert b"Europe/Paris" in refreshed.content
+    assert b"one-time timezone correction is closed" in refreshed.content.lower()
+    assert b"Invite your permanent manager" in refreshed.content
