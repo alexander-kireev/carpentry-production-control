@@ -138,3 +138,25 @@ class PermanentManagerInvitationForm(forms.Form):
 
     def clean_email(self):
         return self.cleaned_data["email"].strip().casefold()
+
+
+class WorkshopTimezoneCorrectionForm(forms.Form):
+    timezone_action = forms.CharField(widget=forms.HiddenInput, initial="correct")
+    submission_nonce = forms.CharField(widget=forms.HiddenInput)
+    expected_workshop_version = forms.IntegerField(
+        min_value=1, widget=forms.HiddenInput
+    )
+    timezone = forms.ChoiceField(choices=(), label="New timezone")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        zones = sorted(available_timezones())
+        self.fields["timezone"].choices = [("", "Select an IANA timezone")] + [
+            (zone, zone) for zone in zones
+        ]
+
+    def clean_timezone(self):
+        value = self.cleaned_data["timezone"]
+        if value not in available_timezones():
+            raise forms.ValidationError("Select a recognised IANA timezone.")
+        return value

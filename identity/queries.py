@@ -120,3 +120,24 @@ def get_pending_manager_setup(user):
         "expires_at": invitation.expires_at,
         "delivery_status": intent.status,
     }
+
+
+def get_timezone_correction_hint(user):
+    workshop = getattr(user, "workshop", None)
+    eligible = bool(
+        user.account_role == User.AccountRole.ADMIN
+        and user.status == User.Status.ACTIVE
+        and user.onboarding_state is None
+        and workshop is not None
+        and workshop.status
+        in {
+            Workshop.Status.MANAGER_REQUIRED,
+            Workshop.Status.MANAGER_ACTIVATION_PENDING,
+        }
+        and workshop.timezone_correction_idempotency_key is None
+    )
+    return {
+        "eligible": eligible,
+        "timezone": workshop.timezone if workshop is not None else None,
+        "workshop_version": workshop.version if workshop is not None else None,
+    }

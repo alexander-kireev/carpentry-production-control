@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from .commands import (
     authenticate_user,
+    correct_workshop_timezone,
     create_workshop,
     end_session,
     establish_session,
@@ -19,8 +20,13 @@ from .forms import (
     PermanentManagerInvitationForm,
     RegistrationForm,
     WorkshopCreationForm,
+    WorkshopTimezoneCorrectionForm,
 )
-from .queries import get_pending_manager_setup, resolve_authenticated_destination
+from .queries import (
+    get_pending_manager_setup,
+    get_timezone_correction_hint,
+    resolve_authenticated_destination,
+)
 from .results import ResultCode
 
 logger = logging.getLogger("identity")
@@ -198,13 +204,66 @@ def _manager_form(user, data=None):
     )
 
 
+def _timezone_form(user, data=None):
+    if data is not None:
+        return WorkshopTimezoneCorrectionForm(data)
+    return WorkshopTimezoneCorrectionForm(
+        initial={
+            "timezone_action": "correct",
+            "submission_nonce": secrets.token_urlsafe(32),
+            "expected_workshop_version": user.workshop.version,
+        }
+    )
+
+
+def _timezone_context(user, data=None, status_message=None):
+    return {
+        "timezone_hint": get_timezone_correction_hint(user),
+        "timezone_form": _timezone_form(user, data),
+        "timezone_status": status_message,
+    }
+
+
+def _handle_timezone_post(request, user):
+    nonce = request.POST.get("submission_nonce", "")
+    command_key = hashlib.sha256(nonce.encode()).hexdigest() if nonce else ""
+    result = correct_workshop_timezone(
+        actor_id=user.id, data=request.POST, idempotency_key=command_key
+    )
+    if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
+        request.session["timezone_status"] = "Workshop timezone corrected."
+        return redirect(request.path)
+    if result.code == ResultCode.VALIDATION_ERROR:
+        return None, _timezone_context(user, request.POST), 400
+    messages = {
+        ResultCode.STALE: "Workshop setup changed. Review the current timezone.",
+        ResultCode.ALREADY_ADVANCED: "Timezone correction is no longer available.",
+    }
+    request.session["timezone_status"] = messages.get(
+        result.code, "Timezone correction is unavailable."
+    )
+    return redirect(request.path)
+
+
 @require_http_methods(["GET", "POST"])
 def onboarding_manager(request):
     resolution = resolve_authenticated_destination(request.user)
     if not resolution.supported or resolution.destination.value != request.path:
         return _redirect_for(request.user)
     user = resolution.user
+    if request.method == "POST" and request.POST.get("timezone_action") == "correct":
+        handled = _handle_timezone_post(request, user)
+        if not isinstance(handled, tuple):
+            return handled
+        _, timezone_context, status = handled
+        context = {
+            "identity_user": user,
+            "form": _manager_form(user),
+            **timezone_context,
+        }
+        return render(request, "onboarding/invite_manager.html", context, status=status)
     if request.method == "GET":
+        timezone_status = request.session.pop("timezone_status", None)
         return render(
             request,
             "onboarding/invite_manager.html",
@@ -212,6 +271,7 @@ def onboarding_manager(request):
                 "identity_user": user,
                 "form": _manager_form(user),
                 "workshop_saved": bool(request.session.pop("workshop_saved", False)),
+                **_timezone_context(user, status_message=timezone_status),
             },
         )
     nonce = request.POST.get("submission_nonce", "")
@@ -243,11 +303,13 @@ def onboarding_manager(request):
             "identity_user": user,
             "form": form,
             "generic_error": generic_error,
+            **_timezone_context(user),
         },
         status=status,
     )
 
 
+@require_http_methods(["GET", "POST"])
 def onboarding_cockpit(request):
     resolution = resolve_authenticated_destination(request.user)
     if not resolution.supported or resolution.destination.value != request.path:
@@ -263,10 +325,32 @@ def onboarding_cockpit(request):
             },
         )
         return redirect("login")
+    if request.method == "POST":
+        if request.POST.get("timezone_action") != "correct":
+            return redirect(request.path)
+        handled = _handle_timezone_post(request, resolution.user)
+        if not isinstance(handled, tuple):
+            return handled
+        _, timezone_context, status = handled
+        return render(
+            request,
+            "onboarding/setup_cockpit.html",
+            {
+                "identity_user": resolution.user,
+                "setup": setup,
+                **timezone_context,
+            },
+            status=status,
+        )
+    timezone_status = request.session.pop("timezone_status", None)
     return render(
         request,
         "onboarding/setup_cockpit.html",
-        {"identity_user": resolution.user, "setup": setup},
+        {
+            "identity_user": resolution.user,
+            "setup": setup,
+            **_timezone_context(resolution.user, status_message=timezone_status),
+        },
     )
 
 

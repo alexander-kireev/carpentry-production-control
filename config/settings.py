@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "foundation.apps.FoundationConfig",
     "workshops.apps.WorkshopsConfig",
     "identity.apps.IdentityConfig",
+    "events.apps.EventsConfig",
 ]
 
 MIDDLEWARE = [
@@ -248,6 +249,11 @@ LOGGING = {
             "propagate": False,
         },
         "identity": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "events": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

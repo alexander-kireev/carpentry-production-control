@@ -245,3 +245,10 @@ def test_production_live_invitation_accepts_public_https_origin():
         )
     )
     assert result.returncode == 0
+
+
+def test_event_app_and_secret_safe_logger_are_configured():
+    from django.conf import settings
+
+    assert "events.apps.EventsConfig" in settings.INSTALLED_APPS
+    assert settings.LOGGING["loggers"]["events"]["propagate"] is False
