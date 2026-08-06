@@ -245,8 +245,27 @@ Migration, race and manual QA checks use uniquely named disposable PostgreSQL
 databases. The ordinary development database must not be migrated without
 separate approval.
 An authenticated administrator resumes Workshop setup from current database state:
-`/onboarding/workshop` creates the Workshop, `/onboarding/manager` is the next-stage
-handoff, `/onboarding` represents pending activation, and active operators wait at
-`/onboarding/holding`. Operational identities reach the data-free `/dashboard`
-handoff. PostgreSQL verification must use uniquely named disposable databases; the
-ordinary development database is not a migration test target.
+`/onboarding/workshop` creates the Workshop and `/onboarding/manager` creates its
+pending permanent-manager account, generation-one invitation and delivery evidence.
+The source transaction commits before the generation-bound delivery worker claims
+the email once and performs external I/O outside database locks. Delivery failure
+does not undo the invitation. `/onboarding` shows the administrator the safe
+pending/sent/failed state; it deliberately has no Resend or replacement controls
+yet. Active operators wait at `/onboarding/holding`, and operational identities
+reach the data-free `/dashboard` handoff.
+
+The default `memory` invitation adapter is non-networked and intended for CI,
+local and integration work. The explicit `failing` adapter exercises
+recoverable delivery failure. `INVITATION_DELIVERY_MODE=live` opts in to the
+fixed Resend SMTP boundary: `smtp.resend.com:587`, username `resend`, sender
+`workshop@alder-and-green.co.uk`, verified STARTTLS and a strict 10-second
+timeout. The API key is environment-only. Live non-production delivery also
+requires the exact recipient in `INVITATION_RECIPIENT_ALLOWLIST`; production
+requires a public credential-free HTTPS `INVITATION_PUBLIC_ORIGIN`. There is no
+fallback or same-generation retry. A `sent` state means Resend accepted the
+message, not that inbox delivery is confirmed. Provider configuration must keep
+Enforced TLS enabled and click/open tracking disabled.
+
+No adapter logs or persists the invitation token, link, message body or SMTP
+credentials. PostgreSQL verification must use uniquely named disposable
+databases; the ordinary development database is not a migration test target.

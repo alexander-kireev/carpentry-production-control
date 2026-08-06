@@ -17,7 +17,7 @@ def test_migration_graph_selects_custom_user_before_auth_and_sessions():
     assert ("auth", "0001_initial") in graph.nodes
     assert ("sessions", "0001_initial") in graph.nodes
     assert ("workshops", "0003_seed_protected_identities") in graph.nodes
-    assert ("identity", "0004_workshop_establishment") in graph.leaf_nodes()
+    assert ("identity", "0005_manager_invitation_delivery") in graph.leaf_nodes()
 
 
 @pytest.mark.django_db
@@ -47,3 +47,8 @@ def test_sb02_tables_exist():
 @pytest.mark.django_db
 def test_sb03_receipt_table_exists():
     assert "workshop_creation_command_receipt" in connection.introspection.table_names()
+    assert "user_invitation" in connection.introspection.table_names()
+    assert "email_delivery_intent" in connection.introspection.table_names()
+    assert (
+        "manager_invitation_command_receipt" in connection.introspection.table_names()
+    )

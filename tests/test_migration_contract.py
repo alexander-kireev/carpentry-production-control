@@ -308,12 +308,14 @@ def test_direct_inserts_receive_canonical_database_defaults():
         assert user_version == 1
 
 
-def test_no_later_slice_tables_exist():
+def test_only_current_slice_identity_tables_exist():
     tables = set(connection.introspection.table_names())
     assert "user_account" in tables
     assert "auth_user" not in tables
     assert "material_category" not in tables
-    assert "user_invitation" not in tables
+    assert "user_invitation" in tables
+    assert "email_delivery_intent" in tables
+    assert "manager_invitation_command_receipt" in tables
     assert "event" not in tables
     assert "notification" not in tables
 
@@ -341,5 +343,17 @@ def test_sb03_migration_is_additive_and_reversible_sql():
     )
     assert (
         "DROP FUNCTION IF EXISTS public.sb03_workshop_creation_receipt_immutable"
+        in migration.REVERSE_SQL
+    )
+
+
+def test_sb04_migration_is_additive_and_reversible_sql():
+    migration = importlib.import_module(
+        "identity.migrations.0005_manager_invitation_delivery"
+    )
+    assert "cst_665_user_invitation_candidate_scope_fk" in migration.FORWARD_SQL
+    assert "cst_668_email_delivery_transition_guard" in migration.FORWARD_SQL
+    assert (
+        "DROP FUNCTION IF EXISTS public.sb04_manager_receipt_guard"
         in migration.REVERSE_SQL
     )

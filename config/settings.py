@@ -1,7 +1,9 @@
 """Environment-driven settings for the local Django foundation."""
 
+import ipaddress
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -95,6 +97,91 @@ ADMIN_REGISTRATION_IP_HMAC_KEY = os.environ.get(
 ADMIN_REGISTRATION_IP_HMAC_KEY_VERSION = _optional_positive_int(
     "ADMIN_REGISTRATION_IP_HMAC_KEY_VERSION"
 )
+
+INVITATION_DELIVERY_MODE = (
+    os.environ.get("INVITATION_DELIVERY_MODE", "memory").strip().lower()
+)
+if INVITATION_DELIVERY_MODE not in {"memory", "failing", "live"}:
+    raise ImproperlyConfigured(
+        "INVITATION_DELIVERY_MODE must be memory, failing or live"
+    )
+INVITATION_ENVIRONMENT = (
+    os.environ.get("INVITATION_ENVIRONMENT", "local").strip().lower()
+)
+if INVITATION_ENVIRONMENT not in {"local", "test", "production"}:
+    raise ImproperlyConfigured(
+        "INVITATION_ENVIRONMENT must be local, test or production"
+    )
+INVITATION_PUBLIC_ORIGIN = (
+    os.environ.get("INVITATION_PUBLIC_ORIGIN", "http://127.0.0.1:8000")
+    .strip()
+    .rstrip("/")
+)
+if not INVITATION_PUBLIC_ORIGIN.startswith(("http://", "https://")):
+    raise ImproperlyConfigured("INVITATION_PUBLIC_ORIGIN must be an http(s) origin")
+INVITATION_SMTP_HOST = os.environ.get("INVITATION_SMTP_HOST", "smtp.resend.com").strip()
+INVITATION_SMTP_PORT = os.environ.get("INVITATION_SMTP_PORT", "587").strip()
+INVITATION_SMTP_USERNAME = os.environ.get("INVITATION_SMTP_USERNAME", "resend").strip()
+INVITATION_FROM_EMAIL = (
+    os.environ.get("INVITATION_FROM_EMAIL", "workshop@alder-and-green.co.uk")
+    .strip()
+    .casefold()
+)
+INVITATION_SMTP_API_KEY = os.environ.get("INVITATION_SMTP_API_KEY", "").strip()
+INVITATION_SMTP_TIMEOUT_SECONDS = os.environ.get(
+    "INVITATION_SMTP_TIMEOUT_SECONDS", "10"
+).strip()
+INVITATION_RECIPIENT_ALLOWLIST = tuple(
+    value.strip().casefold()
+    for value in os.environ.get("INVITATION_RECIPIENT_ALLOWLIST", "").split(",")
+    if value.strip()
+)
+
+
+def _validate_live_invitation_delivery():
+    if INVITATION_DELIVERY_MODE != "live":
+        return
+    exact = (
+        INVITATION_SMTP_HOST == "smtp.resend.com"
+        and INVITATION_SMTP_PORT == "587"
+        and INVITATION_SMTP_USERNAME == "resend"
+        and INVITATION_FROM_EMAIL == "workshop@alder-and-green.co.uk"
+        and INVITATION_SMTP_TIMEOUT_SECONDS == "10"
+        and bool(INVITATION_SMTP_API_KEY)
+    )
+    if not exact:
+        raise ImproperlyConfigured("Live invitation SMTP configuration is invalid")
+    parsed = urlsplit(INVITATION_PUBLIC_ORIGIN)
+    if (
+        not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ImproperlyConfigured("INVITATION_PUBLIC_ORIGIN is invalid")
+    if INVITATION_ENVIRONMENT != "production":
+        if not INVITATION_RECIPIENT_ALLOWLIST:
+            raise ImproperlyConfigured(
+                "Live non-production delivery requires INVITATION_RECIPIENT_ALLOWLIST"
+            )
+        return
+    if parsed.scheme != "https":
+        raise ImproperlyConfigured("Production invitation origin must use HTTPS")
+    hostname = parsed.hostname.casefold()
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        raise ImproperlyConfigured("Production invitation origin must be public")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        if not address.is_global:
+            raise ImproperlyConfigured("Production invitation origin must be public")
+
+
+_validate_live_invitation_delivery()
 
 AUTH_PASSWORD_VALIDATORS = [
     {

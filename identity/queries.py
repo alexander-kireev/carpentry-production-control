@@ -1,6 +1,6 @@
 from workshops.models import Workshop, WorkshopRole
 
-from .models import User
+from .models import EmailDeliveryIntent, User, UserInvitation
 from .results import Destination, DestinationResult
 
 
@@ -66,3 +66,57 @@ def resolve_authenticated_destination(user):
             user=user,
         )
     return DestinationResult(Destination.LOGIN, False, user=user)
+
+
+def get_pending_manager_setup(user):
+    if not (
+        user.account_role == User.AccountRole.ADMIN
+        and user.status == User.Status.ACTIVE
+        and user.workshop_id is not None
+        and user.workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING
+    ):
+        return None
+    candidates = list(
+        User.objects.filter(
+            workshop_id=user.workshop_id,
+            account_role=User.AccountRole.MANAGER,
+            status=User.Status.PENDING,
+            onboarding_state__isnull=True,
+        ).select_related("workshop_role")
+    )
+    if len(candidates) != 1:
+        return None
+    candidate = candidates[0]
+    if not (
+        candidate.workshop_role is not None
+        and candidate.workshop_role.workshop_id is None
+        and candidate.workshop_role.machine_key == "undefined"
+    ):
+        return None
+    invitations = list(
+        UserInvitation.objects.filter(
+            user=candidate,
+            workshop_id=user.workshop_id,
+            status=UserInvitation.Status.PENDING,
+        )
+    )
+    if len(invitations) != 1:
+        return None
+    invitation = invitations[0]
+    intents = list(
+        EmailDeliveryIntent.objects.filter(
+            invitation=invitation,
+            invitation_generation=invitation.invitation_generation,
+        )
+    )
+    if len(intents) != 1:
+        return None
+    intent = intents[0]
+    return {
+        "workshop_name": user.workshop.name,
+        "workshop_timezone": user.workshop.timezone,
+        "candidate_name": f"{candidate.first_name} {candidate.last_name}",
+        "candidate_email": candidate.email,
+        "expires_at": invitation.expires_at,
+        "delivery_status": intent.status,
+    }

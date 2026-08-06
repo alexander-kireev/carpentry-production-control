@@ -221,6 +221,47 @@ def test_failed_statement_rolls_back_without_partial_mutation():
     assert user.workshop_id is None
 
 
+@pytest.mark.django_db(transaction=True)
+def test_invitation_scope_shape_uniqueness_and_transition_guards():
+    from identity.commands import invite_permanent_manager
+    from identity.models import (
+        EmailDeliveryIntent,
+        ManagerInvitationCommandReceipt,
+        UserInvitation,
+    )
+    from tests.test_manager_invitation import attached_admin, payload
+
+    admin, _, _ = attached_admin(email="constraint-admin@example.test")
+    invite_permanent_manager(
+        actor_id=admin.id, data=payload(), idempotency_key="constraints"
+    )
+    invitation = UserInvitation.objects.get()
+    intent = EmailDeliveryIntent.objects.get()
+    receipt = ManagerInvitationCommandReceipt.objects.get()
+    other = _workshop("OtherConstraint")
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            UserInvitation.objects.filter(pk=invitation.pk).update(token_salt=b"")
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            UserInvitation.objects.filter(pk=invitation.pk).update(workshop=other)
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            EmailDeliveryIntent.objects.create(
+                invitation=invitation,
+                recipient_email="duplicate@example.test",
+                invitation_generation=1,
+            )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            EmailDeliveryIntent.objects.filter(pk=intent.pk).update(
+                status="pending", attempt_count=0, last_attempted_at=None
+            )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            ManagerInvitationCommandReceipt.objects.filter(pk=receipt.pk).delete()
+
+
 def test_concurrent_case_variant_email_has_one_committed_winner():
     from concurrent.futures import ThreadPoolExecutor
 

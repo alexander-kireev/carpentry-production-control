@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import ipaddress
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
@@ -121,3 +122,34 @@ def workshop_payload_fingerprint(*, name, address, email, timezone, expected_ver
         len(value.encode()).to_bytes(4, "big") + value.encode() for value in fields
     )
     return hashlib.sha256(encoded).digest()
+
+
+def manager_payload_fingerprint(*, first_name, last_name, date_of_birth, email):
+    fields = (
+        first_name.strip(),
+        last_name.strip(),
+        date_of_birth.isoformat(),
+        email.strip().casefold(),
+    )
+    encoded = b"".join(
+        len(value.encode()).to_bytes(4, "big") + value.encode() for value in fields
+    )
+    return hashlib.sha256(encoded).digest()
+
+
+def generate_invitation_token():
+    raw_token = secrets.token_urlsafe(32)
+    salt = secrets.token_bytes(32)
+    return raw_token, salt, invitation_token_digest(raw_token, salt)
+
+
+def invitation_token_digest(raw_token, salt):
+    return hashlib.sha256(
+        b"manager-invitation-v1\0" + salt + raw_token.encode()
+    ).digest()
+
+
+def invitation_token_matches(raw_token, salt, expected_digest):
+    return hmac.compare_digest(
+        invitation_token_digest(raw_token, salt), expected_digest
+    )

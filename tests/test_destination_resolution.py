@@ -3,7 +3,10 @@ from datetime import date
 import pytest
 
 from identity.models import User
-from identity.queries import resolve_authenticated_destination
+from identity.queries import (
+    get_pending_manager_setup,
+    resolve_authenticated_destination,
+)
 from identity.results import Destination
 from workshops.models import Workshop, WorkshopRole
 
@@ -79,3 +82,19 @@ def test_cross_tenant_role_and_preoperational_manager_fail_closed():
     manager = attached(account_role="manager")
     assert not resolve_authenticated_destination(cross).supported
     assert not resolve_authenticated_destination(manager).supported
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pending_projection_fails_closed_when_aggregate_is_incomplete():
+    from identity.commands import invite_permanent_manager
+    from identity.models import EmailDeliveryIntent
+    from tests.test_manager_invitation import attached_admin, payload
+
+    admin, _, _ = attached_admin(email="projection@example.test")
+    invite_permanent_manager(
+        actor_id=admin.id, data=payload(), idempotency_key="projection"
+    )
+    admin.refresh_from_db()
+    assert get_pending_manager_setup(admin)["delivery_status"] == "sent"
+    EmailDeliveryIntent.objects.all().delete()
+    assert get_pending_manager_setup(admin) is None

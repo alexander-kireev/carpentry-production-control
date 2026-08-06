@@ -106,3 +106,35 @@ class WorkshopCreationForm(forms.Form):
         if value not in available_timezones():
             raise forms.ValidationError("Select a recognised IANA timezone.")
         return value
+
+
+class PermanentManagerInvitationForm(forms.Form):
+    submission_nonce = forms.CharField(widget=forms.HiddenInput)
+    expected_workshop_version = forms.IntegerField(
+        min_value=1, widget=forms.HiddenInput
+    )
+    first_name = forms.CharField(
+        strip=True, widget=forms.TextInput(attrs={"autocomplete": "given-name"})
+    )
+    last_name = forms.CharField(
+        strip=True, widget=forms.TextInput(attrs={"autocomplete": "family-name"})
+    )
+    date_of_birth = forms.DateField(
+        widget=forms.DateInput(attrs={"type": "date", "autocomplete": "bday"})
+    )
+    email = forms.EmailField(widget=forms.EmailInput(attrs={"autocomplete": "email"}))
+
+    def clean_first_name(self):
+        value = self.cleaned_data["first_name"].strip()
+        if not value:
+            raise forms.ValidationError("Enter the manager's first name.")
+        return value
+
+    def clean_last_name(self):
+        value = self.cleaned_data["last_name"].strip()
+        if not value:
+            raise forms.ValidationError("Enter the manager's last name.")
+        return value
+
+    def clean_email(self):
+        return self.cleaned_data["email"].strip().casefold()

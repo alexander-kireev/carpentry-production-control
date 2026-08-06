@@ -11,6 +11,26 @@ from identity.security import (
     normalize_authoritative_ip,
 )
 
+
+def test_manager_invitation_token_is_high_entropy_salted_and_constant_time(monkeypatch):
+    from identity import security
+
+    raw, salt, digest = security.generate_invitation_token()
+    assert len(raw) >= 43
+    assert len(salt) == 32 and len(digest) == 32
+    calls = []
+    original = security.hmac.compare_digest
+
+    def observed(left, right):
+        calls.append((left, right))
+        return original(left, right)
+
+    monkeypatch.setattr(security.hmac, "compare_digest", observed)
+    assert security.invitation_token_matches(raw, salt, digest)
+    assert not security.invitation_token_matches("wrong", salt, digest)
+    assert len(calls) == 2
+
+
 pytestmark = [pytest.mark.django_db(transaction=True)]
 SECURITY = override_settings(
     ADMIN_REGISTRATION_ACTIVATION_CODE="security-code",
