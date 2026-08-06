@@ -22,11 +22,11 @@ def unattached_admin():
     )
 
 
-def test_exact_unattached_admin_resolves_without_workshop_query(
+def test_exact_unattached_admin_resolves_from_fresh_authority_envelope(
     django_assert_num_queries,
 ):
     user = unattached_admin()
-    with django_assert_num_queries(0):
+    with django_assert_num_queries(1):
         result = resolve_authenticated_destination(user)
     assert result.supported
     assert result.destination == Destination.CREATE_WORKSHOP

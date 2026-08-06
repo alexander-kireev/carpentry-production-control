@@ -1,3 +1,5 @@
+from zoneinfo import available_timezones
+
 from django import forms
 from django.contrib.auth import password_validation
 
@@ -57,3 +59,50 @@ class LoginForm(forms.Form):
         strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
     )
+
+
+class WorkshopCreationForm(forms.Form):
+    submission_nonce = forms.CharField(widget=forms.HiddenInput)
+    expected_user_version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)
+    name = forms.CharField(
+        strip=True,
+        label="Workshop name",
+        widget=forms.TextInput(attrs={"autocomplete": "organization"}),
+    )
+    address = forms.CharField(
+        strip=True,
+        widget=forms.Textarea(attrs={"rows": 3, "autocomplete": "street-address"}),
+    )
+    contact_email = forms.EmailField(
+        label="Contact email",
+        widget=forms.EmailInput(attrs={"autocomplete": "email"}),
+    )
+    timezone = forms.ChoiceField(choices=())
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        zones = sorted(available_timezones())
+        self.fields["timezone"].choices = [("", "Select an IANA timezone")] + [
+            (zone, zone) for zone in zones
+        ]
+
+    def clean_name(self):
+        value = self.cleaned_data["name"].strip()
+        if not value:
+            raise forms.ValidationError("Enter a Workshop name.")
+        return value
+
+    def clean_address(self):
+        value = self.cleaned_data["address"].strip()
+        if not value:
+            raise forms.ValidationError("Enter an address.")
+        return value
+
+    def clean_contact_email(self):
+        return self.cleaned_data["contact_email"].strip().casefold()
+
+    def clean_timezone(self):
+        value = self.cleaned_data["timezone"]
+        if value not in available_timezones():
+            raise forms.ValidationError("Select a recognised IANA timezone.")
+        return value

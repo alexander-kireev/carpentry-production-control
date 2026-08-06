@@ -8,11 +8,12 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from .commands import (
     authenticate_user,
+    create_workshop,
     end_session,
     establish_session,
     register_administrator,
 )
-from .forms import LoginForm, RegistrationForm
+from .forms import LoginForm, RegistrationForm, WorkshopCreationForm
 from .queries import resolve_authenticated_destination
 from .results import ResultCode
 
@@ -114,3 +115,120 @@ def login_view(request):
 def logout_view(request):
     end_session(request)
     return redirect("login")
+
+
+def root_destination(request):
+    return _redirect_for(request.user)
+
+
+def _workshop_form(user, data=None):
+    if data is not None:
+        return WorkshopCreationForm(data)
+    return WorkshopCreationForm(
+        initial={
+            "submission_nonce": secrets.token_urlsafe(32),
+            "expected_user_version": user.version,
+            "contact_email": user.email,
+        }
+    )
+
+
+@require_http_methods(["GET", "POST"])
+def workshop_onboarding(request):
+    resolution = resolve_authenticated_destination(request.user)
+    if not resolution.supported or resolution.destination.value != request.path:
+        return _redirect_for(request.user)
+    user = resolution.user
+    if request.method == "GET":
+        return render(
+            request,
+            "onboarding/create_workshop.html",
+            {"form": _workshop_form(user), "identity_user": user},
+        )
+
+    nonce = request.POST.get("submission_nonce", "")
+    receipt_key = hashlib.sha256(nonce.encode()).hexdigest() if nonce else ""
+    result = create_workshop(
+        actor_id=user.id, data=request.POST, idempotency_key=receipt_key
+    )
+    if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
+        request.session["workshop_saved"] = True
+        return redirect("onboarding-manager")
+    if result.code == ResultCode.ALREADY_ADVANCED:
+        return _redirect_for(user)
+    if result.code == ResultCode.VALIDATION_ERROR:
+        form = _workshop_form(user, request.POST)
+        form.is_valid()
+        status = 400
+        generic_error = None
+    else:
+        form = _workshop_form(user)
+        status = 503
+        generic_error = "Workshop setup is temporarily unavailable. Try again."
+    logger.info(
+        "Workshop creation rejected",
+        extra={"operation": "identity.workshop.create", "result_code": "rejected"},
+    )
+    return render(
+        request,
+        "onboarding/create_workshop.html",
+        {
+            "form": form,
+            "identity_user": user,
+            "generic_error": generic_error,
+        },
+        status=status,
+    )
+
+
+def onboarding_manager(request):
+    resolution = resolve_authenticated_destination(request.user)
+    if not resolution.supported or resolution.destination.value != request.path:
+        return _redirect_for(request.user)
+    saved = bool(request.session.pop("workshop_saved", False))
+    return render(
+        request,
+        "onboarding/stage_handoff.html",
+        {
+            "identity_user": resolution.user,
+            "stage": "manager",
+            "workshop_saved": saved,
+        },
+    )
+
+
+def onboarding_cockpit(request):
+    resolution = resolve_authenticated_destination(request.user)
+    if not resolution.supported or resolution.destination.value != request.path:
+        return _redirect_for(request.user)
+    return render(
+        request,
+        "onboarding/stage_handoff.html",
+        {"identity_user": resolution.user, "stage": "pending"},
+    )
+
+
+def holding(request):
+    resolution = resolve_authenticated_destination(request.user)
+    if not resolution.supported or resolution.destination.value != request.path:
+        return _redirect_for(request.user)
+    return render(
+        request,
+        "onboarding/holding.html",
+        {"identity_user": resolution.user},
+    )
+
+
+def dashboard(request):
+    resolution = resolve_authenticated_destination(request.user)
+    if not resolution.supported or resolution.destination.value != request.path:
+        return _redirect_for(request.user)
+    return render(
+        request,
+        "onboarding/stage_handoff.html",
+        {
+            "identity_user": resolution.user,
+            "stage": "operational",
+            "role_home": resolution.role_home,
+        },
+    )

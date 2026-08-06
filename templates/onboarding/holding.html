@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Setup in progress | Carpentry Production Control{% endblock %}
+{% block content %}
+<section class="onboarding-card holding-card">
+  <p class="eyebrow">Setup in progress</p><h1>Your account is ready</h1>
+  <p>The application is still being prepared. You can continue when setup is complete.</p>
+  <a class="button-link" href="{% url 'root' %}">Refresh</a>
+</section>
+{% endblock %}

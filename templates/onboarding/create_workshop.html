@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Create Workshop | Carpentry Production Control{% endblock %}
+{% block content %}
+<nav class="setup-steps" aria-label="Workshop setup progress">
+  <span aria-current="step">1 · Workshop</span><span>2 · Manager</span><span>3 · Setup status</span>
+</nav>
+<section class="onboarding-card" aria-labelledby="workshop-title">
+  <p class="eyebrow">Workshop setup</p>
+  <h1 id="workshop-title">Create your workshop</h1>
+  <p>Add the organisation details used for Workshop-local planning and time.</p>
+  {% if generic_error %}<div class="form-status" role="alert" aria-live="polite">{{ generic_error }}</div>{% elif form.non_field_errors %}<div class="form-status" role="alert" aria-live="polite">{{ form.non_field_errors }}</div>{% endif %}
+  <form method="post" novalidate data-submit-once>
+    {% csrf_token %}{{ form.submission_nonce }}{{ form.expected_user_version }}
+    <div class="field"><label for="id_name">Workshop name</label>{{ form.name }}{{ form.name.errors }}</div>
+    <div class="field"><label for="id_address">Address</label>{{ form.address }}{{ form.address.errors }}</div>
+    <div class="field"><label for="id_contact_email">Contact email</label>{{ form.contact_email }}{{ form.contact_email.errors }}</div>
+    <div class="field"><label for="id_timezone">Timezone</label>{{ form.timezone }}{{ form.timezone.errors }}<small>Choose the IANA timezone used for Workshop planning.</small></div>
+    <button type="submit">Create workshop</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Saving workshop…</span>
+  </form>
+</section>
+{% endblock %}

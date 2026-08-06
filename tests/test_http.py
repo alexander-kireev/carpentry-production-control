@@ -118,6 +118,17 @@ def test_foundation_stylesheet_is_discoverable():
     assert finders.find("css/foundation.css") is not None
 
 
+def test_onboarding_routes_have_no_trailing_slash_alias(client):
+    for path in (
+        "/onboarding/workshop/",
+        "/onboarding/manager/",
+        "/onboarding/",
+        "/onboarding/holding/",
+        "/dashboard/",
+    ):
+        assert client.get(path).status_code in {301, 302, 404}
+
+
 @pytest.mark.django_db
 def test_health_is_minimal_and_query_free(client, django_assert_num_queries):
     with django_assert_num_queries(0):
