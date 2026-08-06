@@ -60,16 +60,42 @@ def test_missing_secret_fails_without_disclosing_configured_value():
     assert "DATABASE_PASSWORD" not in result.stderr
 
 
-def test_default_contrib_apps_are_not_installed():
-    forbidden_apps = {
-        "django.contrib.admin",
+def test_sb01_apps_and_custom_user_are_configured():
+    assert {
         "django.contrib.auth",
         "django.contrib.contenttypes",
         "django.contrib.sessions",
-        "django.contrib.messages",
-    }
+        "identity.apps.IdentityConfig",
+        "workshops.apps.WorkshopsConfig",
+    }.issubset(settings.INSTALLED_APPS)
+    assert {"django.contrib.admin", "django.contrib.messages"}.isdisjoint(
+        settings.INSTALLED_APPS
+    )
+    assert settings.AUTH_USER_MODEL == "identity.User"
+    assert settings.AUTHENTICATION_BACKENDS == []
+    assert settings.SILENCED_SYSTEM_CHECKS == ["auth.W004"]
 
-    assert forbidden_apps.isdisjoint(settings.INSTALLED_APPS)
+
+def test_session_and_authentication_middleware_are_ordered():
+    session_index = settings.MIDDLEWARE.index(
+        "django.contrib.sessions.middleware.SessionMiddleware"
+    )
+    authentication_index = settings.MIDDLEWARE.index(
+        "django.contrib.auth.middleware.AuthenticationMiddleware"
+    )
+    assert session_index < authentication_index
+
+
+def test_canonical_password_validators_are_configured():
+    validators = settings.AUTH_PASSWORD_VALIDATORS
+    names = [item["NAME"].rsplit(".", 1)[-1] for item in validators]
+    assert names == [
+        "UserAttributeSimilarityValidator",
+        "MinimumLengthValidator",
+        "CommonPasswordValidator",
+        "NumericPasswordValidator",
+    ]
+    assert validators[1]["OPTIONS"] == {"min_length": 10}
 
 
 def test_json_formatter_uses_allowlisted_fields_only():

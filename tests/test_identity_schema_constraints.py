@@ -1,0 +1,347 @@
+from datetime import date
+
+import pytest
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+
+from workshops.models import OperationType, Workshop, WorkshopRole
+
+pytestmark = pytest.mark.django_db
+
+
+def _workshop(name="Workshop"):
+    return Workshop.objects.create(
+        name=name,
+        address="Address",
+        email=f"{name.lower()}@example.com",
+        timezone="Europe/London",
+    )
+
+
+def _user(**overrides):
+    User = get_user_model()
+    values = {
+        "password": "!",
+        "first_name": "Test",
+        "last_name": "User",
+        "date_of_birth": date(1990, 1, 1),
+        "email": "test@example.com",
+        "account_role": "admin",
+        "status": "active",
+        "onboarding_state": "registered_no_workshop",
+    }
+    values.update(overrides)
+    return User.objects.create(**values)
+
+
+def test_rejects_invalid_workshop_state_and_lifecycle_edges():
+    workshop = _workshop()
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            Workshop.objects.filter(pk=workshop.pk).update(status="operational")
+    workshop.refresh_from_db()
+    assert workshop.status == "manager_required"
+
+    Workshop.objects.filter(pk=workshop.pk).update(status="manager_activation_pending")
+    Workshop.objects.filter(pk=workshop.pk).update(status="operational")
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            Workshop.objects.filter(pk=workshop.pk).update(status="manager_required")
+
+
+def test_exact_unattached_shape_and_half_attachment_are_database_enforced():
+    _user()
+    workshop = _workshop()
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            _user(email="half@example.com", workshop=workshop)
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            _user(
+                email="manager-null@example.com",
+                account_role="manager",
+                status="active",
+            )
+
+
+def test_attachment_is_one_way_and_account_role_is_immutable():
+    user = _user()
+    workshop = _workshop()
+    admin_role = WorkshopRole.objects.get(machine_key="admin")
+    user.workshop = workshop
+    user.workshop_role = admin_role
+    user.onboarding_state = None
+    user.save()
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            get_user_model().objects.filter(pk=user.pk).update(
+                workshop=None,
+                workshop_role=None,
+                onboarding_state="registered_no_workshop",
+            )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            get_user_model().objects.filter(pk=user.pk).update(account_role="operator")
+    user.refresh_from_db()
+    assert user.workshop_id == workshop.id
+    assert user.account_role == "admin"
+
+
+def test_role_assignment_is_field_specific_and_tenant_scoped():
+    first = _workshop("First")
+    second = _workshop("Second")
+    first_role = WorkshopRole.objects.create(workshop=first, name="Maker")
+    undefined = WorkshopRole.objects.get(machine_key="undefined")
+    admin = WorkshopRole.objects.get(machine_key="admin")
+
+    _user(
+        email="operator@example.com",
+        account_role="operator",
+        status="active",
+        onboarding_state=None,
+        workshop=first,
+        workshop_role=first_role,
+    )
+    _user(
+        email="manager@example.com",
+        account_role="manager",
+        status="pending",
+        onboarding_state=None,
+        workshop=second,
+        workshop_role=undefined,
+    )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            _user(
+                email="cross@example.com",
+                account_role="operator",
+                status="active",
+                onboarding_state=None,
+                workshop=second,
+                workshop_role=first_role,
+            )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            _user(
+                email="bad-admin-role@example.com",
+                account_role="operator",
+                status="active",
+                onboarding_state=None,
+                workshop=second,
+                workshop_role=admin,
+            )
+
+
+def test_permanent_anchor_indexes_and_delete_guard():
+    workshop = _workshop()
+    undefined = WorkshopRole.objects.get(machine_key="undefined")
+    first = _user(
+        email="manager1@example.com",
+        account_role="manager",
+        status="pending",
+        onboarding_state=None,
+        workshop=workshop,
+        workshop_role=undefined,
+    )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            _user(
+                email="manager2@example.com",
+                account_role="manager",
+                status="pending",
+                onboarding_state=None,
+                workshop=workshop,
+                workshop_role=undefined,
+            )
+    first.delete()
+    assert not get_user_model().objects.filter(pk=first.pk).exists()
+
+    admin = _user(email="undeletable@example.com")
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            admin.delete()
+
+
+def test_protected_rows_reject_mutation_and_deletion():
+    role = WorkshopRole.objects.get(machine_key="admin")
+    operation_type = OperationType.objects.get(machine_key="other")
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            WorkshopRole.objects.filter(pk=role.pk).update(name="Changed")
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            role.delete()
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            OperationType.objects.filter(pk=operation_type.pk).update(
+                requires_clearance=True
+            )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            operation_type.delete()
+
+
+def test_protected_pair_shape_and_permanent_identity_are_enforced():
+    workshop = _workshop()
+    protected = OperationType.objects.create(
+        workshop=workshop,
+        name="Build Planning",
+        machine_key="build_planning",
+        is_production=False,
+        requires_clearance=True,
+    )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            OperationType.objects.create(
+                workshop=workshop,
+                name="Station Maintenance",
+                machine_key="build_planning",
+                is_production=False,
+                requires_clearance=True,
+            )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            OperationType.objects.filter(pk=protected.pk).update(name="Changed")
+
+
+def test_failed_statement_rolls_back_without_partial_mutation():
+    user = _user()
+    workshop = _workshop()
+    admin_role = WorkshopRole.objects.get(machine_key="admin")
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            get_user_model().objects.filter(pk=user.pk).update(first_name="Changed")
+            get_user_model().objects.filter(pk=user.pk).update(
+                workshop=workshop,
+                workshop_role=admin_role,
+            )
+    user.refresh_from_db()
+    assert user.first_name == "Test"
+    assert user.workshop_id is None
+
+
+def test_concurrent_case_variant_email_has_one_committed_winner():
+    from concurrent.futures import ThreadPoolExecutor
+
+    import psycopg
+    from django.conf import settings
+
+    undefined_id = WorkshopRole.objects.get(machine_key="undefined").pk
+    database = settings.DATABASES["default"]
+    connect = {
+        "dbname": database["NAME"],
+        "user": database["USER"],
+        "password": database["PASSWORD"],
+        "host": database["HOST"],
+        "port": database["PORT"],
+    }
+    with psycopg.connect(**connect) as setup:
+        workshop_ids = []
+        for index in (1, 2):
+            workshop_ids.append(
+                setup.execute(
+                    """
+                    INSERT INTO workshop
+                    (name,address,email,timezone,status,version,created_at,
+                     station_code_counter,customer_code_counter,order_code_counter,
+                     build_code_counter)
+                    VALUES (%s,'Address',%s,'Europe/London','manager_required',1,now(),0,0,0,0)
+                    RETURNING id
+                    """,
+                    (f"Concurrent {index}", f"concurrent{index}@example.com"),
+                ).fetchone()[0]
+            )
+
+    def insert(email, workshop_id):
+        try:
+            with psycopg.connect(**connect) as session:
+                session.execute(
+                    """
+                    INSERT INTO user_account
+                    (password,last_login,first_name,last_name,date_of_birth,email,
+                     account_role,onboarding_state,status,date_joined,version,
+                     workshop_id,workshop_role_id)
+                    VALUES ('!',NULL,'Case','Race','1990-01-01',%s,
+                            'manager',NULL,'pending',now(),1,%s,%s)
+                    """,
+                    (email, workshop_id, undefined_id),
+                )
+            return "committed"
+        except psycopg.errors.UniqueViolation:
+            return "rejected"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(
+                lambda args: insert(*args),
+                [
+                    ("race@example.com", workshop_ids[0]),
+                    ("RACE@example.com", workshop_ids[1]),
+                ],
+            )
+        )
+    assert sorted(results) == ["committed", "rejected"]
+
+    with psycopg.connect(**connect) as cleanup:
+        cleanup.execute(
+            "DELETE FROM user_account WHERE lower(email) = 'race@example.com'"
+        )
+        cleanup.execute("DELETE FROM workshop WHERE id = ANY(%s)", (workshop_ids,))
+
+
+def test_concurrent_permanent_manager_anchor_has_one_committed_winner():
+    from concurrent.futures import ThreadPoolExecutor
+
+    import psycopg
+    from django.conf import settings
+
+    undefined_id = WorkshopRole.objects.get(machine_key="undefined").pk
+    database = settings.DATABASES["default"]
+    connect = {
+        "dbname": database["NAME"],
+        "user": database["USER"],
+        "password": database["PASSWORD"],
+        "host": database["HOST"],
+        "port": database["PORT"],
+    }
+    with psycopg.connect(**connect) as setup:
+        workshop_id = setup.execute(
+            """
+            INSERT INTO workshop
+            (name,address,email,timezone,status,version,created_at,
+             station_code_counter,customer_code_counter,order_code_counter,
+             build_code_counter)
+            VALUES ('Anchor race','Address','anchor-race@example.com','Europe/London',
+                    'manager_required',1,now(),0,0,0,0)
+            RETURNING id
+            """
+        ).fetchone()[0]
+
+    def insert(email):
+        try:
+            with psycopg.connect(**connect) as session:
+                session.execute(
+                    """
+                    INSERT INTO user_account
+                    (password,last_login,first_name,last_name,date_of_birth,email,
+                     account_role,onboarding_state,status,date_joined,version,
+                     workshop_id,workshop_role_id)
+                    VALUES ('!',NULL,'Anchor','Race','1990-01-01',%s,
+                            'manager',NULL,'pending',now(),1,%s,%s)
+                    """,
+                    (email, workshop_id, undefined_id),
+                )
+            return "committed"
+        except psycopg.errors.UniqueViolation:
+            return "rejected"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(insert, ("anchor1@example.com", "anchor2@example.com")))
+    assert sorted(results) == ["committed", "rejected"]
+
+    with psycopg.connect(**connect) as cleanup:
+        cleanup.execute(
+            "DELETE FROM user_account WHERE workshop_id = %s", (workshop_id,)
+        )
+        cleanup.execute("DELETE FROM workshop WHERE id = %s", (workshop_id,))
