@@ -1,7 +1,10 @@
+from django.utils import timezone
+
 from workshops.models import Workshop, WorkshopRole
 
 from .models import EmailDeliveryIntent, User, UserInvitation
-from .results import Destination, DestinationResult
+from .results import Destination, DestinationResult, InvitationEnvelope
+from .security import invitation_credential_shape, invitation_token_matches
 
 
 def resolve_authenticated_destination(user):
@@ -141,3 +144,49 @@ def get_timezone_correction_hint(user):
         "timezone": workshop.timezone if workshop is not None else None,
         "workshop_version": workshop.version if workshop is not None else None,
     }
+
+
+def get_public_invitation_envelope(selector, raw_token):
+    invitation_id = invitation_credential_shape(selector, raw_token)
+    unavailable = InvitationEnvelope(False)
+    if invitation_id is None:
+        return unavailable
+    invitation = (
+        UserInvitation.objects.select_related("user__workshop_role", "workshop")
+        .filter(pk=invitation_id)
+        .first()
+    )
+    if invitation is None:
+        return unavailable
+    candidate = invitation.user
+    workshop = invitation.workshop
+    role = candidate.workshop_role
+    valid = (
+        invitation.status == UserInvitation.Status.PENDING
+        and invitation.expires_at > timezone.now()
+        and invitation.token_hash_version == 1
+        and invitation.user_id == candidate.id
+        and invitation.workshop_id == candidate.workshop_id == workshop.id
+        and candidate.account_role == User.AccountRole.MANAGER
+        and candidate.status == User.Status.PENDING
+        and candidate.onboarding_state is None
+        and role is not None
+        and role.workshop_id is None
+        and role.machine_key == "undefined"
+        and role.name.casefold() == "undefined"
+        and role.status == WorkshopRole.Status.ACTIVE
+        and workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING
+        and invitation_token_matches(
+            raw_token, bytes(invitation.token_salt), bytes(invitation.token_hash)
+        )
+    )
+    if not valid:
+        return unavailable
+    return InvitationEnvelope(
+        True,
+        selector=invitation.id,
+        generation=invitation.invitation_generation,
+        candidate_name=f"{candidate.first_name} {candidate.last_name}",
+        candidate_email=candidate.email,
+        workshop_name=workshop.name,
+    )

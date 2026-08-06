@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -8,7 +9,7 @@ import pytest
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
-from config.logging import JsonFormatter
+from config.logging import InvitationCredentialFilter, JsonFormatter
 from config.settings import _parse_bool, _parse_hosts, _parse_port, _required
 
 
@@ -252,3 +253,79 @@ def test_event_app_and_secret_safe_logger_are_configured():
 
     assert "events.apps.EventsConfig" in settings.INSTALLED_APPS
     assert settings.LOGGING["loggers"]["events"]["propagate"] is False
+
+
+def test_credential_response_middleware_and_log_filter_are_configured():
+    assert (
+        "identity.middleware.InvitationCredentialResponseMiddleware"
+        in settings.MIDDLEWARE
+    )
+    assert settings.LOGGING["handlers"]["console"]["filters"] == [
+        "credential_redaction"
+    ]
+    assert InvitationCredentialFilter().filter(logging.makeLogRecord({"msg": "safe"}))
+
+
+def test_django_server_runtime_handler_redacts_invitation_credentials():
+    logger = logging.getLogger("django.server")
+    configured = [
+        handler
+        for handler in logger.handlers
+        if isinstance(handler.formatter, JsonFormatter)
+        and any(
+            isinstance(item, InvitationCredentialFilter) for item in handler.filters
+        )
+    ]
+    assert logger.propagate is False and len(configured) == 1
+    handler = configured[0]
+
+    selector = "987654321"
+    token = "runtime-token-canary-abcdefghijklmnopqrstuvwxyz"
+    stream = io.StringIO()
+    original_stream = handler.stream
+    handler.setStream(stream)
+    try:
+        logger.error(
+            "Internal Server Error: /invitations/%s/%s",
+            selector,
+            token,
+            extra={"status_code": 500},
+        )
+    finally:
+        handler.setStream(original_stream)
+    rendered = stream.getvalue()
+    assert "/invitations/<redacted>/<redacted>" in rendered
+    assert selector not in rendered and token not in rendered
+
+
+def test_django_csrf_runtime_handler_redacts_rejected_invitation_path():
+    logger = logging.getLogger("django.security.csrf")
+    configured = [
+        handler
+        for handler in logger.handlers
+        if isinstance(handler.formatter, JsonFormatter)
+        and any(
+            isinstance(item, InvitationCredentialFilter) for item in handler.filters
+        )
+    ]
+    assert logger.propagate is False and len(configured) == 1
+    handler = configured[0]
+
+    selector = "246813579"
+    token = "csrf-token-canary-abcdefghijklmnopqrstuvwxyz"
+    stream = io.StringIO()
+    original_stream = handler.stream
+    handler.setStream(stream)
+    try:
+        logger.warning(
+            "Forbidden (Origin checking failed - null does not match any trusted origins.): "
+            "/invitations/%s/%s",
+            selector,
+            token,
+        )
+    finally:
+        handler.setStream(original_stream)
+    rendered = stream.getvalue()
+    assert "Origin checking failed" in rendered
+    assert "/invitations/<redacted>/<redacted>" in rendered
+    assert selector not in rendered and token not in rendered

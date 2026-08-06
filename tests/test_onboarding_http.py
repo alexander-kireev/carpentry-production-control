@@ -202,3 +202,22 @@ def test_timezone_control_corrects_once_without_hiding_manager_flow(client):
     assert b"Europe/Paris" in refreshed.content
     assert b"one-time timezone correction is closed" in refreshed.content.lower()
     assert b"Invite your permanent manager" in refreshed.content
+
+
+def test_pending_cockpit_exposes_no_acceptance_credential_route(client):
+    user = admin()
+    _create_workshop(client, user)
+    page = client.get("/onboarding/manager")
+    form = page.context["form"]
+    client.post(
+        "/onboarding/manager",
+        {
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+            "first_name": "Morgan",
+            "last_name": "Manager",
+            "date_of_birth": "1991-05-18",
+            "email": "manager-private@example.test",
+        },
+    )
+    assert b"/invitations/" not in client.get("/onboarding").content

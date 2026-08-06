@@ -247,6 +247,15 @@ next route from current account state. Until the next onboarding ticket, an
 unattached administrator is redirected to `/onboarding/workshop` without a
 temporary Workshop page.
 
+Permanent-manager invitation links use the public
+`/invitations/<selector>/<token>` envelope. Valid acceptance establishes the
+manager password and session and makes the Workshop operational atomically.
+Every unavailable cause shares one generic page; credential-bearing paths are
+no-store with an origin-only referrer policy and are redacted by application
+logging. The included
+representative proxy logger is test evidence only, not production deployment
+configuration.
+
 Registration requires three deployment values:
 `ADMIN_REGISTRATION_ACTIVATION_CODE`,
 `ADMIN_REGISTRATION_IP_HMAC_KEY`, and a positive

@@ -7,6 +7,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .commands import (
+    accept_permanent_manager_invitation,
     authenticate_user,
     correct_workshop_timezone,
     create_workshop,
@@ -16,14 +17,17 @@ from .commands import (
     register_administrator,
 )
 from .forms import (
+    InvitationAcceptanceForm,
     LoginForm,
     PermanentManagerInvitationForm,
     RegistrationForm,
     WorkshopCreationForm,
     WorkshopTimezoneCorrectionForm,
 )
+from .models import UserInvitation
 from .queries import (
     get_pending_manager_setup,
+    get_public_invitation_envelope,
     get_timezone_correction_hint,
     resolve_authenticated_destination,
 )
@@ -131,6 +135,46 @@ def logout_view(request):
 
 def root_destination(request):
     return _redirect_for(request.user)
+
+
+def _unavailable_invitation(request):
+    return render(request, "identity/invitation_unavailable.html", status=404)
+
+
+@require_http_methods(["GET", "POST"])
+def invitation_acceptance(request, selector, token):
+    envelope = get_public_invitation_envelope(selector, token)
+    if not envelope.available:
+        return _unavailable_invitation(request)
+    invitation = UserInvitation.objects.filter(pk=envelope.selector).first()
+    candidate = invitation.user if invitation is not None else None
+    if request.method == "GET":
+        return render(
+            request,
+            "identity/invitation_acceptance.html",
+            {"form": InvitationAcceptanceForm(candidate=candidate), "invite": envelope},
+        )
+
+    form = InvitationAcceptanceForm(request.POST, candidate=candidate)
+    if not form.is_valid():
+        return render(
+            request,
+            "identity/invitation_acceptance.html",
+            {"form": form, "invite": envelope},
+            status=400,
+        )
+    result = accept_permanent_manager_invitation(
+        selector=selector,
+        raw_token=token,
+        password=form.cleaned_data["password"],
+        expected_generation=envelope.generation,
+    )
+    if result.code != ResultCode.SUCCESS:
+        return _unavailable_invitation(request)
+    session_result = establish_session(request, result.user)
+    if not session_result.succeeded:
+        return redirect("login")
+    return _redirect_for(result.user)
 
 
 def _workshop_form(user, data=None):

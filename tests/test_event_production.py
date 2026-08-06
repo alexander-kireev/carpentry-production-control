@@ -44,3 +44,16 @@ def test_producer_key_cannot_duplicate():
         produce_events([spec("same")])
     with pytest.raises(IntegrityError), transaction.atomic():
         produce_events([spec("same")])
+
+
+@pytest.mark.django_db
+def test_acceptance_sibling_types_remain_in_closed_catalogue():
+    with transaction.atomic():
+        produced = produce_events(
+            [
+                spec("accepted", "USER_INVITATION_ACCEPTED"),
+                spec("operational", "WORKSHOP_BECAME_OPERATIONAL"),
+            ]
+        )
+    assert len(produced) == 2
+    assert EventNotificationIntent.objects.count() == 2

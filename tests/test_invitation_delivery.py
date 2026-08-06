@@ -1,4 +1,5 @@
 import pytest
+from django.conf import settings
 from django.db import connection
 
 from identity import delivery
@@ -32,6 +33,9 @@ def test_provider_runs_after_claim_commit_and_only_once(monkeypatch):
         raw_token="not-current",
     )
     assert second.code == ResultCode.DELIVERY_NOOP and len(calls) == 1
+    link = calls[0]["body"].split()[-1]
+    assert link.startswith(f"{settings.INVITATION_PUBLIC_ORIGIN}/invitations/")
+    assert result.invitation.token_hash.hex() not in link
 
 
 @pytest.mark.parametrize(

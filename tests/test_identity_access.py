@@ -42,3 +42,11 @@ def test_direct_routes_redirect_before_page_resolution(client):
 
 def test_anonymous_direct_route_goes_to_login(client):
     assert client.get("/operations").headers["Location"] == "/login"
+
+
+def test_invitation_route_bypasses_session_tenant_guard(client):
+    user = unattached_admin()
+    client.force_login(user)
+    response = client.get(f"/invitations/999/{'x' * 43}")
+    assert response.status_code == 404
+    assert b"This invitation is unavailable" in response.content

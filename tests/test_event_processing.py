@@ -68,3 +68,20 @@ def test_routing_failure_retries_then_exhausts_without_payload_logging(caplog):
     assert event.notification_intent.attempts == 3
     assert "poison" not in caplog.text
     assert "Permanent administrator routing is unavailable" not in caplog.text
+
+
+@pytest.mark.django_db(transaction=True)
+def test_manager_acceptance_intents_preserve_zero_one_recipient_split():
+    from identity.commands import accept_permanent_manager_invitation
+    from tests.test_invitation_acceptance import PASSWORD, acceptance_fixture
+
+    admin, _, _, invitation, token = acceptance_fixture()
+    accept_permanent_manager_invitation(
+        selector=str(invitation.id),
+        raw_token=token,
+        password=PASSWORD,
+        expected_generation=1,
+    )
+    result = process_event_notification_intents(limit=10)
+    assert (result.processed, result.notifications) == (2, 1)
+    assert Notification.objects.get().recipient_user_id == admin.id

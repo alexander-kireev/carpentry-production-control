@@ -20,6 +20,7 @@ from workshops.protected_configuration import (
 
 from .delivery import schedule_invitation_delivery
 from .forms import (
+    InvitationAcceptanceForm,
     PermanentManagerInvitationForm,
     RegistrationForm,
     WorkshopCreationForm,
@@ -37,6 +38,8 @@ from .results import CommandResult, ResultCode
 from .security import (
     check_activation_code,
     generate_invitation_token,
+    invitation_credential_shape,
+    invitation_token_matches,
     manager_payload_fingerprint,
     registration_payload_fingerprint,
     workshop_payload_fingerprint,
@@ -146,6 +149,187 @@ def establish_session(request, user):
 def end_session(request):
     logout(request)
     return CommandResult(ResultCode.SUCCESS)
+
+
+def accept_permanent_manager_invitation(
+    *, selector, raw_token, password, expected_generation, fault_after=None
+):
+    invitation_id = invitation_credential_shape(selector, raw_token)
+    if invitation_id is None or not isinstance(expected_generation, int):
+        return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+    discovered = (
+        UserInvitation.objects.filter(pk=invitation_id)
+        .values("user_id", "workshop_id")
+        .first()
+    )
+    if discovered is None:
+        return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+    try:
+        with transaction.atomic():
+            workshop = Workshop.objects.select_for_update().get(
+                pk=discovered["workshop_id"]
+            )
+            permanent_users = list(
+                User.objects.select_for_update()
+                .filter(
+                    workshop=workshop,
+                    account_role__in=(User.AccountRole.ADMIN, User.AccountRole.MANAGER),
+                )
+                .order_by("id")
+            )
+            invitation = UserInvitation.objects.select_for_update().get(
+                pk=invitation_id
+            )
+            protected = resolve_protected_configuration()
+            candidate = next(
+                (user for user in permanent_users if user.id == discovered["user_id"]),
+                None,
+            )
+            admins = [
+                user
+                for user in permanent_users
+                if user.account_role == User.AccountRole.ADMIN
+                and user.status == User.Status.ACTIVE
+                and user.workshop_role_id == protected.admin_role.id
+                and user.onboarding_state is None
+            ]
+            managers = [
+                user
+                for user in permanent_users
+                if user.account_role == User.AccountRole.MANAGER
+            ]
+            valid = (
+                candidate is not None
+                and invitation.user_id == candidate.id
+                and invitation.workshop_id == candidate.workshop_id == workshop.id
+                and invitation.invitation_generation == expected_generation
+                and invitation.status == UserInvitation.Status.PENDING
+                and invitation.expires_at > timezone.now()
+                and invitation.token_hash_version == 1
+                and invitation_token_matches(
+                    raw_token,
+                    bytes(invitation.token_salt),
+                    bytes(invitation.token_hash),
+                )
+                and candidate.account_role == User.AccountRole.MANAGER
+                and candidate.status == User.Status.PENDING
+                and candidate.onboarding_state is None
+                and candidate.workshop_role_id == protected.undefined_role.id
+                and len(admins) == 1
+                and admins[0].id != candidate.id
+                and len(managers) == 1
+                and workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING
+            )
+            if not valid:
+                return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+
+            # Validation is repeated with the locked candidate so mutation never
+            # starts for a password that is invalid for the authoritative User.
+            password_form = InvitationAcceptanceForm(
+                {"password": password, "password_confirmation": password},
+                candidate=candidate,
+            )
+            if not password_form.is_valid():
+                return CommandResult(ResultCode.VALIDATION_ERROR)
+
+            candidate.set_password(password)
+            candidate.status = User.Status.ACTIVE
+            candidate.version += 1
+            candidate.save(update_fields=("password", "status", "version"))
+            if fault_after == "user":
+                raise RuntimeError("acceptance fault after User")
+
+            invitation.status = UserInvitation.Status.CONSUMED
+            invitation.save(update_fields=("status",))
+            if fault_after == "invitation":
+                raise RuntimeError("acceptance fault after invitation")
+
+            prior_state = workshop.status
+            workshop.status = Workshop.Status.OPERATIONAL
+            workshop.version += 1
+            workshop.save(update_fields=("status", "version"))
+            if fault_after == "workshop":
+                raise RuntimeError("acceptance fault after Workshop")
+
+            occurred_at = timezone.now()
+            correlation_key = (
+                f"manager-invitation:{invitation.id}:"
+                f"generation:{invitation.invitation_generation}:acceptance"
+            )
+            safe_manager = {
+                "user_id": candidate.id,
+                "first_name": candidate.first_name,
+                "last_name": candidate.last_name,
+            }
+            accepted_event = produce_events(
+                [
+                    EventSpec(
+                        event_type="USER_INVITATION_ACCEPTED",
+                        occurred_at=occurred_at,
+                        actor_type="user",
+                        actor_user_id=candidate.id,
+                        primary_subject_type="user_invitation",
+                        primary_subject_id=invitation.id,
+                        payload={
+                            "invitation_generation": invitation.invitation_generation,
+                            "requested_account_role": "manager",
+                            "activated_user_id": candidate.id,
+                            "workshop_id": workshop.id,
+                            "manager": safe_manager,
+                        },
+                        idempotency_key=f"{correlation_key}:accepted",
+                        correlation_key=correlation_key,
+                    )
+                ]
+            )[0]
+            if fault_after in {"first_event", "first_intent"}:
+                assert accepted_event.notification_intent.pk
+                raise RuntimeError("acceptance fault after first Event")
+            operational_event = produce_events(
+                [
+                    EventSpec(
+                        event_type="WORKSHOP_BECAME_OPERATIONAL",
+                        occurred_at=occurred_at,
+                        actor_type="user",
+                        actor_user_id=candidate.id,
+                        primary_subject_type="workshop",
+                        primary_subject_id=workshop.id,
+                        payload={
+                            "prior_state": prior_state,
+                            "new_state": workshop.status,
+                            "manager": safe_manager,
+                            "invitation_generation": invitation.invitation_generation,
+                        },
+                        idempotency_key=f"{correlation_key}:operational",
+                        correlation_key=correlation_key,
+                    )
+                ]
+            )[0]
+            if fault_after in {"second_event", "second_intent"}:
+                assert operational_event.notification_intent.pk
+                raise RuntimeError("acceptance fault after second Event")
+            return CommandResult(
+                ResultCode.SUCCESS,
+                user=candidate,
+                workshop=workshop,
+                invitation=invitation,
+                events=(accepted_event, operational_event),
+            )
+    except (
+        IntegrityError,
+        ProtectedConfigurationError,
+        User.DoesNotExist,
+        UserInvitation.DoesNotExist,
+        Workshop.DoesNotExist,
+    ):
+        logger.info(
+            "Invitation acceptance unavailable",
+            extra={
+                "operation": "identity.manager.invitation.accept",
+                "result_code": "unavailable",
+            },
+        )
+        return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
 
 
 def correct_workshop_timezone(*, actor_id, data, idempotency_key, fault_after=None):

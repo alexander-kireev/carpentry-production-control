@@ -4,6 +4,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="{% block referrer_policy %}same-origin{% endblock %}">
     <title>{% block title %}Carpentry Production Control{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/foundation.css' %}">
   </head>

@@ -38,6 +38,7 @@ class CommandResult:
     candidate: object | None = None
     invitation: object | None = None
     delivery_intent: object | None = None
+    events: tuple = ()
 
     @property
     def succeeded(self):
@@ -50,3 +51,13 @@ class DestinationResult:
     supported: bool
     role_home: str | None = None
     user: object | None = None
+
+
+@dataclass(frozen=True)
+class InvitationEnvelope:
+    available: bool
+    selector: int | None = None
+    generation: int | None = None
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    workshop_name: str | None = None
