@@ -50,6 +50,14 @@ a { color: #87431f; font-weight: 700; }
 .success-status { margin-bottom: 1rem; padding: .8rem 1rem; border-left: .3rem solid #3d7b51; background: #e4f2e7; color: #245532; font-weight: 800; }
 .button-link { display: inline-block; padding: .8rem 1.3rem; border-radius: .2rem; background: var(--graphite); color: #fff; text-decoration: none; }
 .holding-card { max-width: 38rem; }
+.fact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin: 1.5rem 0; }
+.fact-grid div { padding: .9rem; border: 1px solid var(--line); background: #fff; }
+.fact-grid dt { color: var(--muted); font-size: .8rem; font-weight: 800; text-transform: uppercase; }
+.fact-grid dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
+.status-chip { display: inline-block; padding: .2rem .55rem; border-radius: 999px; background: #e7eaec; font-weight: 800; }
+.status-sent { background: #dceee1; color: #245532; }
+.status-failed { background: #f9e6e3; color: #741d1d; }
+.neutral-status { padding: .8rem 1rem; border-left: .3rem solid #687178; background: #eceff0; }
 
 @media (max-width: 40rem) {
   .public-shell { width: min(100% - 1rem, 58rem); padding: .5rem 0; }
@@ -61,6 +69,7 @@ a { color: #87431f; font-weight: 700; }
   .auth-card { padding: 1.25rem; }
   .form-grid { grid-template-columns: 1fr; gap: 0; }
   .field-wide { grid-column: auto; }
+  .fact-grid { grid-template-columns: 1fr; }
   button { width: 100%; }
   .submit-status { margin: .75rem 0 0; }
 }

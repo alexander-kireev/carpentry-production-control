@@ -190,6 +190,153 @@ class WorkshopCreationCommandReceipt(models.Model):
         ]
 
 
+class UserInvitation(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CONSUMED = "consumed", "Consumed"
+        RECALLED = "recalled", "Recalled"
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="invitations", db_constraint=False
+    )
+    workshop = models.ForeignKey(
+        "workshops.Workshop",
+        on_delete=models.CASCADE,
+        related_name="user_invitations",
+        db_constraint=False,
+    )
+    token_hash = models.BinaryField(unique=True)
+    token_hash_version = models.SmallIntegerField(default=1, db_default=1)
+    token_salt = models.BinaryField()
+    invitation_generation = models.PositiveIntegerField(default=1, db_default=1)
+    status = models.TextField(
+        choices=Status.choices, default=Status.PENDING, db_default="pending"
+    )
+    created_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "user_invitation"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=("pending", "consumed", "recalled")),
+                name="cst_028_user_invitation_status",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(expires_at__gt=models.F("created_at")),
+                name="cst_030_user_invitation_expiry",
+            ),
+            models.UniqueConstraint(
+                fields=("user",),
+                condition=models.Q(status="pending"),
+                name="cst_031_user_pending_invitation_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(token_hash_version__gt=0)
+                & models.Q(invitation_generation__gt=0)
+                & models.Q(expires_at__gt=models.F("issued_at")),
+                name="cst_665_user_invitation_generation",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("user",), name="idx_004_invitation_user"),
+            models.Index(
+                fields=("status", "expires_at"), name="idx_005_invitation_expiry"
+            ),
+        ]
+
+
+class EmailDeliveryIntent(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+        SUPERSEDED = "superseded", "Superseded"
+
+    invitation = models.ForeignKey(
+        UserInvitation, on_delete=models.CASCADE, related_name="delivery_intents"
+    )
+    purpose = models.TextField(default="invitation", db_default="invitation")
+    recipient_email = models.TextField()
+    invitation_generation = models.PositiveIntegerField()
+    status = models.TextField(
+        choices=Status.choices, default=Status.PENDING, db_default="pending"
+    )
+    attempt_count = models.PositiveIntegerField(default=0, db_default=0)
+    last_attempted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+
+    class Meta:
+        db_table = "email_delivery_intent"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(purpose="invitation")
+                & ~models.Q(recipient_email="")
+                & models.Q(invitation_generation__gt=0)
+                & models.Q(status__in=("pending", "sent", "failed", "superseded"))
+                & models.Q(attempt_count__gte=0)
+                & models.Q(attempt_count__lte=1)
+                & (
+                    models.Q(attempt_count=0, last_attempted_at__isnull=True)
+                    | models.Q(attempt_count=1, last_attempted_at__isnull=False)
+                ),
+                name="cst_666_email_delivery_shape",
+            ),
+            models.UniqueConstraint(
+                fields=("invitation", "invitation_generation"),
+                name="cst_667_email_delivery_generation_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("status", "created_at"), name="idx_008_delivery_monitor"
+            )
+        ]
+
+
+class ManagerInvitationCommandReceipt(models.Model):
+    workshop = models.ForeignKey(
+        "workshops.Workshop",
+        on_delete=models.RESTRICT,
+        related_name="manager_invitation_receipts",
+    )
+    actor_user = models.ForeignKey(
+        User,
+        on_delete=models.RESTRICT,
+        related_name="manager_invitation_receipts_created",
+    )
+    candidate_user = models.OneToOneField(
+        User,
+        on_delete=models.DO_NOTHING,
+        related_name="manager_invitation_receipt",
+        db_constraint=False,
+    )
+    result_invitation = models.ForeignKey(
+        UserInvitation,
+        on_delete=models.DO_NOTHING,
+        related_name="command_receipts",
+        db_constraint=False,
+    )
+    idempotency_key = models.TextField()
+    fingerprint_version = models.SmallIntegerField()
+    payload_fingerprint = models.BinaryField()
+    created_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+
+    class Meta:
+        db_table = "manager_invitation_command_receipt"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(fingerprint_version__gt=0),
+                name="cst_676_manager_invite_fingerprint_version",
+            ),
+            models.UniqueConstraint(
+                fields=("workshop", "idempotency_key"),
+                name="cst_677_manager_invite_receipt_key_uniq",
+            ),
+        ]
+
+
 class ActivationCodeAttemptBucket(models.Model):
     hmac_key_version = models.SmallIntegerField()
     client_ip_hmac = models.BinaryField()

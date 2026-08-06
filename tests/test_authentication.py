@@ -92,3 +92,24 @@ def test_login_resume_uses_current_attached_state(client):
         "/login", {"email": user.email, "password": "Valid-password-483!"}
     )
     assert response.headers["Location"] == "/onboarding/manager"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_login_and_lost_response_resume_pending_cockpit(client):
+    from identity.commands import invite_permanent_manager
+    from tests.test_manager_invitation import attached_admin, payload
+
+    user, _, _ = attached_admin(email="pending-resume@example.test")
+    invite_permanent_manager(
+        actor_id=user.id, data=payload(), idempotency_key="lost-response"
+    )
+    client.force_login(user)
+    assert client.get("/onboarding/manager").headers["Location"] == "/onboarding"
+    assert client.post("/logout").headers["Location"] == "/login"
+    response = client.post(
+        "/login",
+        {"email": user.email, "password": "Valid-password-483!"},
+    )
+    assert response.headers["Location"] == "/onboarding"
+    page = client.get("/onboarding")
+    assert b"Manager activation pending" in page.content

@@ -3,7 +3,13 @@ from datetime import date
 import pytest
 from django.test import Client
 
-from identity.models import User, WorkshopCreationCommandReceipt
+from identity.models import (
+    EmailDeliveryIntent,
+    ManagerInvitationCommandReceipt,
+    User,
+    UserInvitation,
+    WorkshopCreationCommandReceipt,
+)
 from workshops.models import OperationType, WorkshopRole
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -60,7 +66,7 @@ def test_create_workshop_page_and_post_success(client):
     assert response.headers["Location"] == "/onboarding/manager"
     handoff = client.get(response.headers["Location"])
     assert b"Workshop saved" in handoff.content
-    assert b'id="id_first_name"' not in handoff.content
+    assert b'id="id_first_name"' in handoff.content
     assert b"generation" not in handoff.content.lower()
     assert WorkshopCreationCommandReceipt.objects.count() == 1
     assert (
@@ -93,3 +99,83 @@ def test_validation_retains_non_secret_fields(client):
     )
     assert response.status_code == 400 and b"Kept" in response.content
     assert b"Select a valid choice" in response.content
+
+
+def _create_workshop(client, user):
+    client.force_login(user)
+    page = client.get("/onboarding/workshop")
+    form = page.context["form"]
+    return client.post(
+        "/onboarding/workshop",
+        {
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_user_version": form.initial["expected_user_version"],
+            "name": "HTTP Invitation Workshop",
+            "address": "2 HTTP Lane",
+            "contact_email": "invite-workshop@example.test",
+            "timezone": "Europe/London",
+        },
+    )
+
+
+def test_manager_form_invalid_post_and_committed_pending_cockpit(client):
+    user = admin()
+    response = _create_workshop(client, user)
+    assert response.headers["Location"] == "/onboarding/manager"
+    page = client.get("/onboarding/manager")
+    assert page.status_code == 200
+    assert b"Invite your permanent manager" in page.content
+    assert b"data-submit-once" in page.content and b"Send invitation" in page.content
+    form = page.context["form"]
+    invalid = client.post(
+        "/onboarding/manager",
+        {
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+            "first_name": "Morgan",
+            "last_name": "Manager",
+            "date_of_birth": "",
+            "email": "bad",
+        },
+    )
+    assert invalid.status_code == 400 and b"Morgan" in invalid.content
+    assert UserInvitation.objects.count() == 0
+    page = client.get("/onboarding/manager")
+    form = page.context["form"]
+    posted = client.post(
+        "/onboarding/manager",
+        {
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+            "first_name": "Morgan",
+            "last_name": "Manager",
+            "date_of_birth": "1991-05-18",
+            "email": "manager-http@example.test",
+        },
+    )
+    assert posted.headers["Location"] == "/onboarding"
+    pending = client.get("/onboarding")
+    html = pending.content.lower()
+    assert b"manager activation pending" in html
+    assert b"morgan manager" in html and b"manager-http@example.test" in html
+    assert b"provider accepted" in html and b"not yet confirmed" in html
+    for forbidden in (
+        b"/invitations/",
+        b"token_hash",
+        b"generation",
+        b"receipt",
+        b"date of birth",
+    ):
+        assert forbidden not in html
+    assert UserInvitation.objects.count() == 1
+    assert EmailDeliveryIntent.objects.count() == 1
+    assert ManagerInvitationCommandReceipt.objects.count() == 1
+    assert client.get("/onboarding/manager").headers["Location"] == "/onboarding"
+
+
+def test_manager_post_requires_csrf(client):
+    user = admin()
+    _create_workshop(client, user)
+    secure = Client(enforce_csrf_checks=True)
+    secure.force_login(user)
+    assert secure.post("/onboarding/manager", {}).status_code == 403

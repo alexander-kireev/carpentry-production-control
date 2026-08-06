@@ -11,10 +11,16 @@ from .commands import (
     create_workshop,
     end_session,
     establish_session,
+    invite_permanent_manager,
     register_administrator,
 )
-from .forms import LoginForm, RegistrationForm, WorkshopCreationForm
-from .queries import resolve_authenticated_destination
+from .forms import (
+    LoginForm,
+    PermanentManagerInvitationForm,
+    RegistrationForm,
+    WorkshopCreationForm,
+)
+from .queries import get_pending_manager_setup, resolve_authenticated_destination
 from .results import ResultCode
 
 logger = logging.getLogger("identity")
@@ -181,19 +187,64 @@ def workshop_onboarding(request):
     )
 
 
+def _manager_form(user, data=None):
+    if data is not None:
+        return PermanentManagerInvitationForm(data)
+    return PermanentManagerInvitationForm(
+        initial={
+            "submission_nonce": secrets.token_urlsafe(32),
+            "expected_workshop_version": user.workshop.version,
+        }
+    )
+
+
+@require_http_methods(["GET", "POST"])
 def onboarding_manager(request):
     resolution = resolve_authenticated_destination(request.user)
     if not resolution.supported or resolution.destination.value != request.path:
         return _redirect_for(request.user)
-    saved = bool(request.session.pop("workshop_saved", False))
+    user = resolution.user
+    if request.method == "GET":
+        return render(
+            request,
+            "onboarding/invite_manager.html",
+            {
+                "identity_user": user,
+                "form": _manager_form(user),
+                "workshop_saved": bool(request.session.pop("workshop_saved", False)),
+            },
+        )
+    nonce = request.POST.get("submission_nonce", "")
+    receipt_key = hashlib.sha256(nonce.encode()).hexdigest() if nonce else ""
+    result = invite_permanent_manager(
+        actor_id=user.id, data=request.POST, idempotency_key=receipt_key
+    )
+    if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
+        return redirect("onboarding-cockpit")
+    if result.code == ResultCode.ALREADY_ADVANCED:
+        return _redirect_for(user)
+    if result.code == ResultCode.VALIDATION_ERROR:
+        form = _manager_form(user, request.POST)
+        form.is_valid()
+        status = 400
+        generic_error = None
+    else:
+        form = _manager_form(user)
+        status = 503
+        generic_error = "Manager invitation is temporarily unavailable. Try again."
+    logger.info(
+        "Manager invitation rejected",
+        extra={"operation": "identity.manager.invite", "result_code": "rejected"},
+    )
     return render(
         request,
-        "onboarding/stage_handoff.html",
+        "onboarding/invite_manager.html",
         {
-            "identity_user": resolution.user,
-            "stage": "manager",
-            "workshop_saved": saved,
+            "identity_user": user,
+            "form": form,
+            "generic_error": generic_error,
         },
+        status=status,
     )
 
 
@@ -201,10 +252,21 @@ def onboarding_cockpit(request):
     resolution = resolve_authenticated_destination(request.user)
     if not resolution.supported or resolution.destination.value != request.path:
         return _redirect_for(request.user)
+    setup = get_pending_manager_setup(resolution.user)
+    if setup is None:
+        logger.error(
+            "Pending manager projection unavailable",
+            extra={
+                "operation": "identity.manager.pending.read",
+                "result_code": "failed",
+                "workshop_id": resolution.user.workshop_id,
+            },
+        )
+        return redirect("login")
     return render(
         request,
-        "onboarding/stage_handoff.html",
-        {"identity_user": resolution.user, "stage": "pending"},
+        "onboarding/setup_cockpit.html",
+        {"identity_user": resolution.user, "setup": setup},
     )
 
 

@@ -12,6 +12,11 @@ class ResultCode(StrEnum):
     STALE = "stale"
     REPLAY = "replay"
     ALREADY_ADVANCED = "already_advanced"
+    INVITATION_UNAVAILABLE = "invitation_unavailable"
+    DELIVERY_PENDING = "delivery_pending"
+    DELIVERY_SENT = "delivery_sent"
+    DELIVERY_FAILED = "delivery_failed"
+    DELIVERY_NOOP = "delivery_noop"
 
 
 class Destination(StrEnum):
@@ -29,6 +34,9 @@ class CommandResult:
     user: object | None = None
     errors: dict[str, list[str]] = field(default_factory=dict)
     workshop: object | None = None
+    candidate: object | None = None
+    invitation: object | None = None
+    delivery_intent: object | None = None
 
     @property
     def succeeded(self):

@@ -151,3 +151,97 @@ def test_json_formatter_includes_exception_class():
     payload = json.loads(JsonFormatter().format(record))
 
     assert payload["exception_class"] == "ValueError"
+
+
+def _live_environment(**overrides):
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "INVITATION_DELIVERY_MODE": "live",
+            "INVITATION_ENVIRONMENT": "test",
+            "INVITATION_PUBLIC_ORIGIN": "https://qa.alder-and-green.co.uk",
+            "INVITATION_SMTP_HOST": "smtp.resend.com",
+            "INVITATION_SMTP_PORT": "587",
+            "INVITATION_SMTP_USERNAME": "resend",
+            "INVITATION_FROM_EMAIL": "workshop@alder-and-green.co.uk",
+            "INVITATION_SMTP_API_KEY": "synthetic-api-key-canary",
+            "INVITATION_SMTP_TIMEOUT_SECONDS": "10",
+            "INVITATION_RECIPIENT_ALLOWLIST": "manager@example.test",
+        }
+    )
+    environment.update(overrides)
+    return environment
+
+
+def _import_settings(environment):
+    return subprocess.run(
+        [sys.executable, "-c", "import config.settings"],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+    )
+
+
+def test_memory_invitation_mode_requires_no_live_secret():
+    environment = _live_environment(
+        INVITATION_DELIVERY_MODE="memory", INVITATION_SMTP_API_KEY=""
+    )
+    assert _import_settings(environment).returncode == 0
+
+
+@pytest.mark.parametrize(
+    "override",
+    (
+        {"INVITATION_DELIVERY_MODE": "automatic"},
+        {"INVITATION_SMTP_HOST": "smtp.example.test"},
+        {"INVITATION_SMTP_PORT": "25"},
+        {"INVITATION_SMTP_USERNAME": "other"},
+        {"INVITATION_FROM_EMAIL": "other@alder-and-green.co.uk"},
+        {"INVITATION_SMTP_API_KEY": ""},
+        {"INVITATION_SMTP_TIMEOUT_SECONDS": "30"},
+        {"INVITATION_RECIPIENT_ALLOWLIST": ""},
+    ),
+)
+def test_live_invitation_mode_rejects_inexact_configuration_without_secret_leak(
+    override,
+):
+    result = _import_settings(_live_environment(**override))
+    assert result.returncode != 0
+    assert "synthetic-api-key-canary" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "origin",
+    (
+        "http://workshop.alder-and-green.co.uk",
+        "https://localhost",
+        "https://127.0.0.1",
+        "https://user:password@workshop.alder-and-green.co.uk",
+        "https://workshop.alder-and-green.co.uk/path",
+        "https://workshop.alder-and-green.co.uk?query=yes",
+    ),
+)
+def test_production_live_invitation_requires_public_credential_free_https_origin(
+    origin,
+):
+    result = _import_settings(
+        _live_environment(
+            INVITATION_ENVIRONMENT="production",
+            INVITATION_PUBLIC_ORIGIN=origin,
+            INVITATION_RECIPIENT_ALLOWLIST="",
+        )
+    )
+    assert result.returncode != 0
+    assert "synthetic-api-key-canary" not in result.stderr
+
+
+def test_production_live_invitation_accepts_public_https_origin():
+    result = _import_settings(
+        _live_environment(
+            INVITATION_ENVIRONMENT="production",
+            INVITATION_PUBLIC_ORIGIN="https://workshop.alder-and-green.co.uk",
+            INVITATION_RECIPIENT_ALLOWLIST="",
+        )
+    )
+    assert result.returncode == 0
