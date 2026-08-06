@@ -58,3 +58,29 @@ def resolve_protected_configuration():
         admin_role=by_key["admin"],
         other_operation_type=operation_types[0],
     )
+
+
+def resolve_admin_role():
+    return resolve_protected_configuration().admin_role
+
+
+def verify_workshop_protected_pair(workshop):
+    rows = list(OperationType.objects.filter(workshop=workshop).order_by("machine_key"))
+    expected = {
+        ("build_planning", "Build Planning", "active", False, True, True),
+        ("station_maintenance", "Station Maintenance", "active", False, True, True),
+    }
+    actual = {
+        (
+            row.machine_key,
+            row.name,
+            row.status,
+            row.is_production,
+            row.requires_clearance,
+            row.version > 0,
+        )
+        for row in rows
+    }
+    if actual != expected:
+        raise ProtectedConfigurationError("Protected configuration is invalid")
+    return tuple(rows)

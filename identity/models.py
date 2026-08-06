@@ -155,6 +155,41 @@ class RegistrationCommandReceipt(models.Model):
         ]
 
 
+class WorkshopCreationCommandReceipt(models.Model):
+    idempotency_key = models.TextField(unique=True)
+    fingerprint_version = models.SmallIntegerField()
+    payload_fingerprint = models.BinaryField()
+    actor_user = models.ForeignKey(
+        User,
+        on_delete=models.RESTRICT,
+        related_name="workshop_creation_receipt",
+        db_constraint=False,
+    )
+    result_workshop = models.ForeignKey(
+        "workshops.Workshop",
+        on_delete=models.RESTRICT,
+        related_name="creation_receipt",
+        db_constraint=False,
+    )
+    created_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+
+    class Meta:
+        db_table = "workshop_creation_command_receipt"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(fingerprint_version__gt=0),
+                name="cst_672_workshop_fingerprint_version_positive",
+            ),
+            models.UniqueConstraint(
+                fields=("actor_user",), name="cst_674_workshop_receipt_actor_uniq"
+            ),
+            models.UniqueConstraint(
+                fields=("result_workshop",),
+                name="cst_675_workshop_receipt_result_uniq",
+            ),
+        ]
+
+
 class ActivationCodeAttemptBucket(models.Model):
     hmac_key_version = models.SmallIntegerField()
     client_ip_hmac = models.BinaryField()

@@ -244,3 +244,9 @@ independent secrets and must not be committed.
 Migration, race and manual QA checks use uniquely named disposable PostgreSQL
 databases. The ordinary development database must not be migrated without
 separate approval.
+An authenticated administrator resumes Workshop setup from current database state:
+`/onboarding/workshop` creates the Workshop, `/onboarding/manager` is the next-stage
+handoff, `/onboarding` represents pending activation, and active operators wait at
+`/onboarding/holding`. Operational identities reach the data-free `/dashboard`
+handoff. PostgreSQL verification must use uniquely named disposable databases; the
+ordinary development database is not a migration test target.

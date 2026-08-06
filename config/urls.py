@@ -3,10 +3,11 @@
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.urls import include, path
 
-from foundation.views import health, root
+from foundation.views import health
+from identity.views import root_destination
 
 urlpatterns = [
-    path("", root, name="root"),
+    path("", root_destination, name="root"),
     path("health/", health, name="health"),
     path("", include("identity.urls")),
 ]

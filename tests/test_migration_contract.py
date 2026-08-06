@@ -329,3 +329,17 @@ def test_sb02_migration_is_additive_and_reversible_sql():
         "DROP FUNCTION IF EXISTS public.sb02_registration_receipt_immutable"
         in migration.REVERSE_SQL
     )
+
+
+def test_sb03_migration_is_additive_and_reversible_sql():
+    migration = importlib.import_module(
+        "identity.migrations.0004_workshop_establishment"
+    )
+    assert (
+        "CREATE TRIGGER cst_672_workshop_creation_receipt_immutable"
+        in migration.FORWARD_SQL
+    )
+    assert (
+        "DROP FUNCTION IF EXISTS public.sb03_workshop_creation_receipt_immutable"
+        in migration.REVERSE_SQL
+    )

@@ -71,3 +71,24 @@ def test_logout_rejects_missing_csrf():
     csrf_client = Client(enforce_csrf_checks=True)
     csrf_client.force_login(user)
     assert csrf_client.post("/logout").status_code == 403
+
+
+def test_login_resume_uses_current_attached_state(client):
+    from workshops.models import Workshop, WorkshopRole
+
+    workshop = Workshop.objects.create(
+        name="Resume",
+        address="Address",
+        email="resume-workshop@example.test",
+        timezone="UTC",
+    )
+    user = make_user(
+        email="resume@example.test",
+        onboarding_state=None,
+        workshop=workshop,
+        workshop_role=WorkshopRole.objects.get(machine_key="admin"),
+    )
+    response = client.post(
+        "/login", {"email": user.email, "password": "Valid-password-483!"}
+    )
+    assert response.headers["Location"] == "/onboarding/manager"

@@ -107,3 +107,17 @@ def registration_payload_fingerprint(*, first_name, last_name, date_of_birth, em
         len(value.encode()).to_bytes(4, "big") + value.encode() for value in fields
     )
     return hashlib.sha256(encoded).digest()
+
+
+def workshop_payload_fingerprint(*, name, address, email, timezone, expected_version):
+    fields = (
+        name.strip(),
+        address.strip(),
+        email.strip().casefold(),
+        timezone,
+        str(expected_version),
+    )
+    encoded = b"".join(
+        len(value.encode()).to_bytes(4, "big") + value.encode() for value in fields
+    )
+    return hashlib.sha256(encoded).digest()

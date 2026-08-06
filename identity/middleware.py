@@ -6,7 +6,6 @@ from .queries import resolve_authenticated_destination
 
 class PreWorkshopAccessMiddleware:
     public_paths = {"/", "/login", "/register", "/health/"}
-    unattached_paths = {"/", "/logout", "/onboarding/workshop", "/health/"}
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -25,6 +24,8 @@ class PreWorkshopAccessMiddleware:
         if not resolution.supported:
             logout(request)
             return redirect("login")
-        if path in {"/login", "/register"} or path not in self.unattached_paths:
+        request.identity_destination = resolution
+        allowed = {"/", "/logout", resolution.destination.value}
+        if path not in allowed:
             return redirect(resolution.destination.value)
         return self.get_response(request)

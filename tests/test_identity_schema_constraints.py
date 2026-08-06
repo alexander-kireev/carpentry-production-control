@@ -401,3 +401,97 @@ def test_sb02_physical_types_constraints_and_index():
             "SELECT 1 FROM pg_indexes WHERE indexname='idx_124_activation_window'"
         )
         assert cursor.fetchone() == (1,)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_workshop_creation_receipt_physical_contract_is_immutable():
+    from datetime import date
+
+    from django.db import DatabaseError, transaction
+
+    from identity.commands import create_workshop
+    from identity.models import User, WorkshopCreationCommandReceipt
+    from workshops.models import OperationType, WorkshopRole
+
+    WorkshopRole.objects.get_or_create(
+        machine_key="undefined", defaults={"name": "undefined", "status": "active"}
+    )
+    WorkshopRole.objects.get_or_create(
+        machine_key="admin", defaults={"name": "Admin", "status": "active"}
+    )
+    OperationType.objects.get_or_create(
+        machine_key="other",
+        defaults={
+            "name": "Other",
+            "is_production": True,
+            "requires_clearance": False,
+            "status": "active",
+        },
+    )
+
+    user = User.objects.create_user(
+        email="schema-receipt@example.test",
+        password="Valid-password-483!",
+        first_name="Schema",
+        last_name="Receipt",
+        date_of_birth=date(1990, 1, 1),
+        account_role="admin",
+        status="active",
+        onboarding_state="registered_no_workshop",
+    )
+    data = {
+        "submission_nonce": "schema",
+        "expected_user_version": 1,
+        "name": "Schema Workshop",
+        "address": "1 Schema Lane",
+        "contact_email": "schema-workshop@example.test",
+        "timezone": "Europe/London",
+    }
+    assert create_workshop(
+        actor_id=user.id, data=data, idempotency_key="schema"
+    ).succeeded
+    receipt = WorkshopCreationCommandReceipt.objects.get()
+    with pytest.raises(DatabaseError), transaction.atomic():
+        WorkshopCreationCommandReceipt.objects.filter(pk=receipt.pk).update(
+            fingerprint_version=2
+        )
+
+
+@pytest.mark.django_db
+def test_workshop_creation_receipt_types_constraints_and_trigger_are_exact():
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT column_name,data_type,column_default,is_nullable "
+            "FROM information_schema.columns "
+            "WHERE table_name='workshop_creation_command_receipt' "
+            "ORDER BY ordinal_position"
+        )
+        assert cursor.fetchall() == [
+            ("id", "bigint", None, "NO"),
+            ("idempotency_key", "text", None, "NO"),
+            ("fingerprint_version", "smallint", None, "NO"),
+            ("payload_fingerprint", "bytea", None, "NO"),
+            ("created_at", "timestamp with time zone", "now()", "NO"),
+            ("actor_user_id", "bigint", None, "NO"),
+            ("result_workshop_id", "bigint", None, "NO"),
+        ]
+        cursor.execute(
+            "SELECT conname,contype,confdeltype FROM pg_constraint "
+            "WHERE conrelid='workshop_creation_command_receipt'::regclass"
+        )
+        constraints = set(cursor.fetchall())
+        assert {
+            ("cst_672_workshop_fingerprint_version_positive", "c", " "),
+            ("cst_673_workshop_receipt_actor_fk", "f", "r"),
+            ("cst_673_workshop_receipt_result_fk", "f", "r"),
+            ("cst_674_workshop_receipt_actor_uniq", "u", " "),
+            ("cst_675_workshop_receipt_result_uniq", "u", " "),
+        } <= constraints
+        cursor.execute(
+            "SELECT tgname FROM pg_trigger "
+            "WHERE tgrelid='workshop_creation_command_receipt'::regclass "
+            "AND NOT tgisinternal"
+        )
+        assert cursor.fetchall() == [("cst_672_workshop_creation_receipt_immutable",)]

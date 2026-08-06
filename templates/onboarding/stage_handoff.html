@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Workshop setup | Carpentry Production Control{% endblock %}
+{% block content %}
+{% if stage != "operational" %}<nav class="setup-steps" aria-label="Workshop setup progress"><span>✓ Workshop</span><span {% if stage == "manager" %}aria-current="step"{% endif %}>2 · Manager</span><span {% if stage == "pending" %}aria-current="step"{% endif %}>3 · Setup status</span></nav>{% endif %}
+<section class="onboarding-card" aria-live="polite">
+  {% if stage == "manager" %}
+    {% if workshop_saved %}<div class="success-status" role="status">Workshop saved</div>{% endif %}
+    <p class="eyebrow">Next step</p><h1>Invite your permanent manager</h1>
+    <p>The Workshop is ready for its permanent manager invitation. This step is delivered next.</p>
+  {% elif stage == "pending" %}
+    <p class="eyebrow">Setup status</p><h1>Manager activation is pending</h1>
+    <p>Workshop setup will continue here. Invitation status and setup actions are delivered in a later step.</p>
+  {% else %}
+    <p class="eyebrow">Account ready</p><h1>{{ role_home|capfirst }} workspace</h1>
+    <p>Your operational role home is ready. Dashboard information is not included in this delivery.</p>
+  {% endif %}
+</section>
+{% endblock %}

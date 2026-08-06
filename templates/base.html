@@ -8,8 +8,14 @@
     <link rel="stylesheet" href="{% static 'css/foundation.css' %}">
   </head>
   <body>
-    <main class="public-shell">
-      <div class="brand" aria-label="Carpentry Production Control">CPC</div>
+    <main class="{% if identity_user %}onboarding-shell{% else %}public-shell{% endif %}">
+      <header class="shell-header">
+        <div class="brand" aria-label="Carpentry Production Control">CPC</div>
+        {% if identity_user %}
+          <div class="own-identity" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div>
+          <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="button-secondary">Log out</button></form>
+        {% endif %}
+      </header>
       {% block content %}{% endblock %}
     </main>
     <script>
