@@ -19,7 +19,7 @@
   </dl>
   {% if invitation_status %}<p class="success-status" role="status">{{ invitation_status }}</p>{% endif %}
   {% if setup.delivery_status == "failed" %}<div class="form-status" role="status">The invitation is saved, but delivery failed. You can commit a fresh invitation below.</div>{% elif setup.delivery_status == "pending" %}<p class="neutral-status" role="status">Delivery is pending. The invitation remains safely saved.</p>{% else %}<p class="success-status" role="status">The email provider accepted the invitation for delivery. Inbox delivery is not yet confirmed.</p>{% endif %}
-  <p><a class="button-link" href="{% url 'workshops:libraries' %}">Configure workshop now</a></p><p><a href="{% url 'workshops:libraries' %}">Resume workshop setup</a></p>
+  <p class="setup-configuration-links"><a class="button-link" href="{% url 'workshops:libraries' %}">Configure libraries</a> <a class="button-link" href="{% url 'workshops:materials' %}">Configure materials</a></p><p><a href="{% url 'workshops:libraries' %}">Resume workshop setup</a></p>
 </section>
 <section class="onboarding-card recovery-card" aria-labelledby="resend-title">
   <p class="eyebrow">Invitation recovery</p>

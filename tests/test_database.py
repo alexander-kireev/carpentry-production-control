@@ -18,6 +18,7 @@ def test_migration_graph_selects_custom_user_before_auth_and_sessions():
     assert ("sessions", "0001_initial") in graph.nodes
     assert ("workshops", "0003_seed_protected_identities") in graph.nodes
     assert ("events", "0002_event_subject") in graph.leaf_nodes()
+    assert ("workshops", "0005_sc02_material_catalogue") in graph.leaf_nodes()
 
 
 @pytest.mark.django_db
@@ -59,3 +60,13 @@ def test_sb05_event_boundary_tables_exist():
     assert {"event", "event_notification_intent", "notification"} <= set(
         connection.introspection.table_names()
     )
+
+
+@pytest.mark.django_db
+def test_sc02_material_catalogue_tables_exist():
+    assert {
+        "material",
+        "material_variant",
+        "stock_effect",
+        "material_command_receipt",
+    } <= set(connection.introspection.table_names())

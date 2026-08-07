@@ -13,7 +13,7 @@
       <header class="shell-header">
         <div class="brand" aria-label="Carpentry Production Control">CPC</div>
         {% if identity_user %}
-          {% if identity_user.workshop.status == "operational" and identity_user.account_role != "operator" %}<nav class="role-nav" aria-label="Workshop"><a href="{% url 'workshops:libraries' %}">Libraries</a></nav>{% endif %}
+          {% if identity_user.workshop.status == "operational" %}<nav class="role-nav" aria-label="Workshop">{% if identity_user.account_role != "operator" %}<a href="{% url 'workshops:libraries' %}">Libraries</a>{% endif %}<a href="{% url 'workshops:materials' %}">Materials</a></nav>{% endif %}
           <div class="own-identity" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div>
           <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="button-secondary">Log out</button></form>
         {% endif %}
@@ -67,6 +67,21 @@
         const invalidField = dialogWithErrors.querySelector('[aria-invalid="true"]');
         if (invalidField) invalidField.focus();
       }
+      document.querySelectorAll("form[data-material-dependencies]").forEach((form) => {
+        [["category_id", "category_version"], ["unit_id", "unit_version"]].forEach(([selectName, versionName]) => {
+          const select = form.elements.namedItem(selectName);
+          const version = form.elements.namedItem(versionName);
+          if (!select || !version) return;
+          const sync = () => {
+            const option = select.options[select.selectedIndex];
+            let versions = {};
+            try { versions = JSON.parse(select.dataset.versionMap || "{}"); } catch (_) { versions = {}; }
+            version.value = option ? versions[option.value] || version.value : version.value;
+          };
+          select.addEventListener("change", sync);
+          sync();
+        });
+      });
     </script>
   </body>
 </html>

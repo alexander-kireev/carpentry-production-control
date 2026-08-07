@@ -30,6 +30,15 @@ ALLOWED_EVENT_TYPES = frozenset(
         "SHIFT_DEFINITION_EDITED",
         "SHIFT_DEFINITION_RETIRED",
         "SHIFT_DEFINITION_RESTORED",
+        "MATERIAL_CREATED",
+        "MATERIAL_UPDATED",
+        "MATERIAL_RETIRED",
+        "MATERIAL_RESTORED",
+        "MATERIAL_VARIANT_CREATED",
+        "MATERIAL_VARIANT_UPDATED",
+        "MATERIAL_VARIANT_RETIRED",
+        "MATERIAL_VARIANT_RESTORED",
+        "MATERIAL_STOCK_REPLENISHED",
     }
 )
 
@@ -40,6 +49,20 @@ CONFIGURATION_SUBJECTS = {
     "MATERIAL_CATEGORY": "material_category",
     "SHIFT_DEFINITION": "shift_definition",
 }
+
+MATERIAL_EVENT_TYPES = frozenset(
+    {
+        "MATERIAL_CREATED",
+        "MATERIAL_UPDATED",
+        "MATERIAL_RETIRED",
+        "MATERIAL_RESTORED",
+        "MATERIAL_VARIANT_CREATED",
+        "MATERIAL_VARIANT_UPDATED",
+        "MATERIAL_VARIANT_RETIRED",
+        "MATERIAL_VARIANT_RESTORED",
+        "MATERIAL_STOCK_REPLENISHED",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +97,9 @@ def _validate_configuration_subjects(spec):
         WorkshopRole,
     )
 
+    if spec.event_type in MATERIAL_EVENT_TYPES:
+        _validate_material_subjects(spec)
+        return
     prefix = next(
         (
             prefix
@@ -111,6 +137,87 @@ def _validate_configuration_subjects(spec):
         raise ValueError("Invalid related subjects")
     if not Workshop.objects.filter(pk=source.workshop_id).exists():
         raise ValueError("Invalid Workshop subject")
+
+
+def _validate_material_subjects(spec):
+    from workshops.models import (
+        Material,
+        MaterialCategory,
+        MaterialVariant,
+        StockEffect,
+        UnitType,
+    )
+
+    if (
+        spec.event_type.startswith("MATERIAL_VARIANT_")
+        or spec.event_type == "MATERIAL_STOCK_REPLENISHED"
+    ):
+        if (
+            spec.primary_subject_type != "material_variant"
+            or not spec.primary_subject_id
+        ):
+            raise ValueError("Invalid primary subject")
+        try:
+            variant = MaterialVariant.objects.select_related("material").get(
+                pk=spec.primary_subject_id
+            )
+        except MaterialVariant.DoesNotExist as error:
+            raise ValueError("Invalid primary subject") from error
+        if spec.event_type == "MATERIAL_STOCK_REPLENISHED":
+            if len(spec.subjects) != 1:
+                raise ValueError("Invalid related subjects")
+            subject = spec.subjects[0]
+            if (
+                subject.subject_type != "stock_effect"
+                or subject.subject_role != "source_effect"
+            ):
+                raise ValueError("Invalid related subjects")
+            effect = StockEffect.objects.filter(
+                pk=subject.subject_id,
+                workshop_id=variant.workshop_id,
+                material_variant_id=variant.id,
+                effect_type="opening_balance",
+                source_type="material_variant_creation",
+            ).first()
+            if effect is None:
+                raise ValueError("Invalid related subjects")
+            return
+        expected = (
+            EventSubjectSpec("material", variant.material_id, "material"),
+            EventSubjectSpec("unit_type", variant.material.unit_id, "unit_type"),
+        )
+        if tuple(spec.subjects) != expected:
+            raise ValueError("Invalid related subjects")
+        if not UnitType.objects.filter(
+            pk=variant.material.unit_id, workshop_id=variant.workshop_id
+        ).exists():
+            raise ValueError("Invalid related subjects")
+        return
+    if spec.primary_subject_type != "material" or not spec.primary_subject_id:
+        raise ValueError("Invalid primary subject")
+    try:
+        material = Material.objects.get(pk=spec.primary_subject_id)
+    except Material.DoesNotExist as error:
+        raise ValueError("Invalid primary subject") from error
+    expected = (
+        EventSubjectSpec(
+            "material_category", material.category_id, "material_category"
+        ),
+    )
+    if tuple(spec.subjects) != expected:
+        raise ValueError("Invalid related subjects")
+    category = MaterialCategory.objects.filter(pk=material.category_id).first()
+    valid_category = category is not None and (
+        category.workshop_id == material.workshop_id
+        or (
+            category.workshop_id is None
+            and category.machine_key == "undefined"
+            and category.name == "undefined"
+            and category.status == "active"
+        )
+    )
+    if not valid_category:
+        raise ValueError("Invalid related subjects")
 
 
 def produce_events(specs: Iterable[EventSpec]):

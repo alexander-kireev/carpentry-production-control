@@ -1,10 +1,10 @@
 <nav class="section-tabs" aria-label="Library families">
   {% for key,label in family_labels.items %}
-    <a href="?family={{ key|urlencode }}&status={{ filters.status|urlencode }}&q={{ filters.search|urlencode }}"{% if filters.family == key %} aria-current="page"{% endif %}>{{ label }}</a>
+    <a href="{% url 'workshops:libraries' %}?family={{ key|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;q={{ filters.search|urlencode }}"{% if filters.family == key %} aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}
 </nav>
 
-<form class="library-filters" method="get" role="search">
+<form class="library-filters" method="get" action="{% url 'workshops:libraries' %}" role="search">
   <input type="hidden" name="family" value="{{ filters.family }}">
   <div class="library-search-field">
     <label for="library-search">Search this library</label>
@@ -20,7 +20,7 @@
     </select>
   </div>
   <button type="submit" class="library-filter-button">Apply filters</button>
-  {% if filters.search or filters.status %}<a class="library-clear-filter" href="?family={{ filters.family|urlencode }}">Clear filters</a>{% endif %}
+  {% if filters.search or filters.status %}<a class="library-clear-filter" href="{% url 'workshops:libraries' %}?family={{ filters.family|urlencode }}">Clear filters</a>{% endif %}
 </form>
 
 {% for family in families %}
