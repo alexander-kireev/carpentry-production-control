@@ -13,6 +13,8 @@ class ResultCode(StrEnum):
     REPLAY = "replay"
     ALREADY_ADVANCED = "already_advanced"
     INVITATION_UNAVAILABLE = "invitation_unavailable"
+    # Recovery failures deliberately converge with the public invitation family.
+    MANAGER_RECOVERY_UNAVAILABLE = "invitation_unavailable"
     DELIVERY_PENDING = "delivery_pending"
     DELIVERY_SENT = "delivery_sent"
     DELIVERY_FAILED = "delivery_failed"

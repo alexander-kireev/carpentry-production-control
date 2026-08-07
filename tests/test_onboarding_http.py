@@ -2,7 +2,9 @@ from datetime import date
 
 import pytest
 from django.test import Client
+from django.utils import timezone
 
+from events.models import Event
 from identity.models import (
     EmailDeliveryIntent,
     ManagerInvitationCommandReceipt,
@@ -164,9 +166,9 @@ def test_manager_form_invalid_post_and_committed_pending_cockpit(client):
         b"token_hash",
         b"generation",
         b"receipt",
-        b"date of birth",
     ):
         assert forbidden not in html
+    assert b"1991-05-18" not in html
     assert UserInvitation.objects.count() == 1
     assert EmailDeliveryIntent.objects.count() == 1
     assert ManagerInvitationCommandReceipt.objects.count() == 1
@@ -221,3 +223,134 @@ def test_pending_cockpit_exposes_no_acceptance_credential_route(client):
         },
     )
     assert b"/invitations/" not in client.get("/onboarding").content
+
+
+def _reach_pending_cockpit(client):
+    user = admin()
+    _create_workshop(client, user)
+    page = client.get("/onboarding/manager")
+    form = page.context["form"]
+    response = client.post(
+        "/onboarding/manager",
+        {
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+            "first_name": "Morgan",
+            "last_name": "Manager",
+            "date_of_birth": "1991-05-18",
+            "email": "manager-recovery@example.test",
+        },
+    )
+    assert response.headers["Location"] == "/onboarding"
+    return user
+
+
+def test_cockpit_recovery_controls_resend_and_do_not_duplicate_on_refresh(client):
+    _reach_pending_cockpit(client)
+    page = client.get("/onboarding")
+    html = page.content.lower()
+    assert b"send a fresh invitation" in html
+    assert b"replace pending manager" in html
+    assert b"confirm resend" in html and b"confirm replacement" in html
+    resend = page.context["resend_form"]
+    response = client.post(
+        "/onboarding",
+        {
+            "invitation_action": "resend",
+            "submission_nonce": resend.initial["submission_nonce"],
+            "expected_workshop_version": resend.initial["expected_workshop_version"],
+        },
+    )
+    assert response.headers["Location"] == "/onboarding"
+    refreshed = client.get("/onboarding")
+    assert b"previous link is now unavailable" in refreshed.content.lower()
+    assert UserInvitation.objects.get().invitation_generation == 2
+    assert EmailDeliveryIntent.objects.count() == 2
+    client.get("/onboarding")
+    assert UserInvitation.objects.get().invitation_generation == 2
+
+
+def test_cockpit_replacement_validation_and_success(client):
+    _reach_pending_cockpit(client)
+    old_candidate = User.objects.get(account_role="manager")
+    page = client.get("/onboarding")
+    form = page.context["replacement_form"]
+    invalid = client.post(
+        "/onboarding",
+        {
+            "invitation_action": "replace",
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+            "first_name": "Kept",
+            "last_name": "",
+            "date_of_birth": "1992-06-19",
+            "email": "bad",
+        },
+    )
+    assert invalid.status_code == 400 and b"Kept" in invalid.content
+    assert User.objects.filter(pk=old_candidate.id).exists()
+    page = client.get("/onboarding")
+    form = page.context["replacement_form"]
+    replaced = client.post(
+        "/onboarding",
+        {
+            "invitation_action": "replace",
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+            "first_name": "Riley",
+            "last_name": "Replacement",
+            "date_of_birth": "1992-06-19",
+            "email": "riley-http@example.test",
+        },
+    )
+    assert replaced.headers["Location"] == "/onboarding"
+    refreshed = client.get("/onboarding")
+    assert b"riley replacement" in refreshed.content.lower()
+    assert b"pending manager was replaced" in refreshed.content.lower()
+    assert not User.objects.filter(pk=old_candidate.id).exists()
+
+
+def test_cockpit_unknown_action_and_csrf_are_safe(client):
+    user = _reach_pending_cockpit(client)
+    before = (User.objects.count(), UserInvitation.objects.count())
+    assert (
+        client.post("/onboarding", {"invitation_action": "unknown"}).status_code == 302
+    )
+    assert (User.objects.count(), UserInvitation.objects.count()) == before
+    secure = Client(enforce_csrf_checks=True)
+    secure.force_login(user)
+    assert (
+        secure.post("/onboarding", {"invitation_action": "resend"}).status_code == 403
+    )
+
+
+def test_cockpit_hides_replacement_when_candidate_has_history(client):
+    _reach_pending_cockpit(client)
+    candidate = User.objects.get(account_role="manager")
+    invitation = UserInvitation.objects.get(user=candidate)
+    Event.objects.create(
+        event_type="SYNTHETIC_HISTORY",
+        occurred_at=timezone.now(),
+        actor_type="user",
+        actor_user=candidate,
+        primary_subject_type="user",
+        primary_subject_id=candidate.id,
+    )
+    response = client.get("/onboarding")
+    assert response.status_code == 200
+    assert b"replace pending manager" not in response.content.lower()
+    assert b"confirm replacement" not in response.content.lower()
+    assert User.objects.filter(pk=candidate.id).exists()
+    assert UserInvitation.objects.filter(pk=invitation.id).exists()
+
+
+def test_cockpit_fails_closed_for_superseded_current_delivery(client, monkeypatch):
+    monkeypatch.setattr(
+        "identity.commands.schedule_invitation_delivery", lambda **kwargs: None
+    )
+    _reach_pending_cockpit(client)
+    intent = EmailDeliveryIntent.objects.get()
+    EmailDeliveryIntent.objects.filter(pk=intent.pk).update(status="superseded")
+    response = client.get("/onboarding")
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login"

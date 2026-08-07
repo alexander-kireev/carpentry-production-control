@@ -15,11 +15,15 @@ from .commands import (
     establish_session,
     invite_permanent_manager,
     register_administrator,
+    replace_pending_permanent_manager,
+    resend_permanent_manager_invitation,
 )
 from .forms import (
     InvitationAcceptanceForm,
     LoginForm,
     PermanentManagerInvitationForm,
+    PermanentManagerReplacementForm,
+    PermanentManagerResendForm,
     RegistrationForm,
     WorkshopCreationForm,
     WorkshopTimezoneCorrectionForm,
@@ -268,6 +272,43 @@ def _timezone_context(user, data=None, status_message=None):
     }
 
 
+def _resend_form(workshop_version, data=None):
+    if data is not None:
+        return PermanentManagerResendForm(data)
+    return PermanentManagerResendForm(
+        initial={
+            "invitation_action": "resend",
+            "submission_nonce": secrets.token_urlsafe(32),
+            "expected_workshop_version": workshop_version,
+        }
+    )
+
+
+def _replacement_form(workshop_version, data=None):
+    if data is not None:
+        return PermanentManagerReplacementForm(data)
+    return PermanentManagerReplacementForm(
+        initial={
+            "invitation_action": "replace",
+            "submission_nonce": secrets.token_urlsafe(32),
+            "expected_workshop_version": workshop_version,
+        }
+    )
+
+
+def _cockpit_context(user, setup, *, replacement_data=None, status_message=None):
+    return {
+        "identity_user": user,
+        "setup": setup,
+        "resend_form": _resend_form(setup["workshop_version"]),
+        "replacement_form": _replacement_form(
+            setup["workshop_version"], replacement_data
+        ),
+        "invitation_status": status_message,
+        **_timezone_context(user),
+    }
+
+
 def _handle_timezone_post(request, user):
     nonce = request.POST.get("submission_nonce", "")
     command_key = hashlib.sha256(nonce.encode()).hexdigest() if nonce else ""
@@ -370,31 +411,74 @@ def onboarding_cockpit(request):
         )
         return redirect("login")
     if request.method == "POST":
-        if request.POST.get("timezone_action") != "correct":
+        if request.POST.get("timezone_action") == "correct":
+            handled = _handle_timezone_post(request, resolution.user)
+            if not isinstance(handled, tuple):
+                return handled
+            _, timezone_context, status = handled
+            context = _cockpit_context(resolution.user, setup)
+            context.update(timezone_context)
+            return render(
+                request,
+                "onboarding/setup_cockpit.html",
+                context,
+                status=status,
+            )
+        action = request.POST.get("invitation_action")
+        if action not in {"resend", "replace"}:
             return redirect(request.path)
-        handled = _handle_timezone_post(request, resolution.user)
-        if not isinstance(handled, tuple):
-            return handled
-        _, timezone_context, status = handled
-        return render(
-            request,
-            "onboarding/setup_cockpit.html",
-            {
-                "identity_user": resolution.user,
-                "setup": setup,
-                **timezone_context,
-            },
-            status=status,
+        nonce = request.POST.get("submission_nonce", "")
+        command_key = hashlib.sha256(nonce.encode()).hexdigest() if nonce else ""
+        if action == "resend":
+            result = resend_permanent_manager_invitation(
+                actor_id=resolution.user.id,
+                data=request.POST,
+                idempotency_key=command_key,
+            )
+        else:
+            result = replace_pending_permanent_manager(
+                actor_id=resolution.user.id,
+                data=request.POST,
+                idempotency_key=command_key,
+            )
+        if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
+            if action == "resend":
+                request.session["invitation_status"] = (
+                    "A fresh invitation was committed. The previous link is now "
+                    "unavailable."
+                )
+            else:
+                request.session["invitation_status"] = (
+                    "The pending manager was replaced and a fresh invitation was "
+                    "committed."
+                )
+            return redirect(request.path)
+        if result.code == ResultCode.ALREADY_ADVANCED:
+            return _redirect_for(resolution.user)
+        if result.code == ResultCode.VALIDATION_ERROR and action == "replace":
+            form = _replacement_form(setup["workshop_version"], request.POST)
+            form.is_valid()
+            context = _cockpit_context(
+                resolution.user, setup, replacement_data=request.POST
+            )
+            context["replacement_form"] = form
+            return render(request, "onboarding/setup_cockpit.html", context, status=400)
+        messages = {
+            ResultCode.STALE: "Workshop setup changed. Review the current invitation.",
+            ResultCode.VALIDATION_ERROR: "The recovery request was invalid.",
+        }
+        request.session["invitation_status"] = messages.get(
+            result.code, "Invitation recovery is currently unavailable."
         )
+        return redirect(request.path)
     timezone_status = request.session.pop("timezone_status", None)
+    invitation_status = request.session.pop("invitation_status", None)
+    context = _cockpit_context(resolution.user, setup, status_message=invitation_status)
+    context["timezone_status"] = timezone_status
     return render(
         request,
         "onboarding/setup_cockpit.html",
-        {
-            "identity_user": resolution.user,
-            "setup": setup,
-            **_timezone_context(resolution.user, status_message=timezone_status),
-        },
+        context,
     )
 
 
