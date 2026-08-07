@@ -10,7 +10,7 @@ from identity.commands import accept_permanent_manager_invitation
 from identity.models import User, UserInvitation
 from identity.results import ResultCode
 from identity.security import generate_invitation_token
-from workshops.models import OperationType, Workshop, WorkshopRole
+from workshops.models import MaterialCategory, OperationType, Workshop, WorkshopRole
 
 pytestmark = pytest.mark.django_db(transaction=True)
 PASSWORD = "Manager-valid-483!"
@@ -31,6 +31,10 @@ def acceptance_fixture(*, expired=False):
             "requires_clearance": False,
             "status": "active",
         },
+    )
+    MaterialCategory.objects.get_or_create(
+        machine_key="undefined",
+        defaults={"name": "undefined", "status": "active", "version": 1},
     )
     workshop = Workshop.objects.create(
         name="Acceptance Workshop",

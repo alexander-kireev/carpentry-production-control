@@ -28,6 +28,11 @@ class PreWorkshopAccessMiddleware:
             return redirect("login")
         request.identity_destination = resolution
         allowed = {"/", "/logout", resolution.destination.value}
+        if path == "/workshop/libraries" or path.startswith("/workshop/libraries/"):
+            from workshops.queries import resolve_libraries_access
+
+            if resolve_libraries_access(request.user) is not None:
+                return self.get_response(request)
         if path not in allowed:
             return redirect(resolution.destination.value)
         return self.get_response(request)

@@ -63,8 +63,68 @@ a { color: #87431f; font-weight: 700; }
 .invitation-context div { padding: .8rem; border: 1px solid var(--line); background: #fff; }
 .invitation-context dt { color: var(--muted); font-size: .75rem; font-weight: 800; text-transform: uppercase; }
 .invitation-context dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
-.recovery-card { margin-top: 1rem; }
+.recovery-card, .timezone-correction { margin-top: 1rem; }
 .recovery-card h2 { margin-bottom: .35rem; }
+.role-nav { margin: 0 1rem 1.25rem 0; }
+.role-nav a { color: #fff; }
+.library-shell { padding: clamp(1.25rem, 3vw, 2.5rem); border: 1px solid #d6d9dc; border-radius: .65rem; background: #f4f4f5; box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 22%); }
+.library-shell h1 { font-size: clamp(2rem, 4vw, 2.65rem); }
+.library-shell h2, .library-shell h3 { margin: .15rem 0 .45rem; }
+.library-back-link { display: inline-block; margin-bottom: 1rem; }
+.library-pagehead { display: flex; align-items: start; justify-content: space-between; gap: 1.5rem; }
+.library-purpose { max-width: 48rem; margin: .45rem 0 0; color: var(--muted); font-size: 1.05rem; line-height: 1.5; }
+.library-context { flex: 0 0 auto; padding: .4rem .7rem; border: 1px solid #aeb5b9; border-radius: 999px; background: #fff; font-size: .8rem; font-weight: 800; }
+.library-preset-preview { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; margin: 1.25rem 0; padding: 1rem 1.15rem; border: 1px dashed #aeb5b9; border-radius: .5rem; background: #fff; }
+.library-preset-preview p { margin: .2rem 0 0; color: var(--muted); }
+.library-preset-preview button:disabled { cursor: not-allowed; }
+.section-tabs { display: flex; gap: .2rem; overflow-x: auto; margin-top: 1.5rem; border-bottom: 1px solid #b9c0c4; scrollbar-width: thin; }
+.section-tabs a { flex: 0 0 auto; padding: .8rem 1rem; border-bottom: .2rem solid transparent; color: #3f474b; text-decoration: none; }
+.section-tabs a[aria-current="page"] { border-bottom-color: var(--graphite); color: #111517; }
+.library-filters { display: grid; grid-template-columns: minmax(15rem, 1fr) minmax(10rem, .35fr) auto auto; gap: .75rem; align-items: end; margin: 1rem 0; padding: 1rem; border: 1px solid #d6d9dc; border-radius: .5rem; background: #fff; }
+.library-filter-button { min-height: 2.9rem; }
+.library-clear-filter { padding: .75rem .2rem; }
+.library-family { margin-top: 1rem; border: 1px solid #d6d9dc; border-radius: .55rem; background: #fff; overflow: hidden; }
+.library-family-head { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1.15rem 1.25rem; border-bottom: 1px solid #d6d9dc; }
+.library-family-head p:last-child { max-width: 48rem; margin: 0; color: var(--muted); }
+.library-add-button { flex: 0 0 auto; }
+.library-dialog { width: min(38rem, calc(100% - 2rem)); max-height: calc(100vh - 2rem); padding: 0; border: 1px solid #89949a; border-radius: .65rem; color: #202426; box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 42%); }
+.library-dialog::backdrop { background: rgb(23 26 28 / 72%); }
+.library-form-panel { position: relative; padding: 1.5rem; background: #fff; overflow-y: auto; }
+.library-dialog-close { position: absolute; top: .75rem; right: .75rem; min-width: 2.75rem; min-height: 2.75rem; padding: .3rem; border: 1px solid #89949a; background: #fff; color: #202426; font-size: 1.4rem; }
+.library-dialog-close:hover { background: #eceff0; }
+.library-confirm-dialog { width: min(32rem, calc(100% - 2rem)); }
+.library-confirm-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.25rem; }
+.library-confirm-actions form { margin: 0; }
+.table-scroll { overflow-x: auto; }
+.library-table { min-width: 46rem; }
+.library-table caption { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.library-table th { background: #f1f2f3; }
+.library-table tbody tr:hover { background: #f7f8f8; }
+.library-system-row { background: #f5f6f6; }
+.library-row-details p { margin: 0 0 .5rem; }
+.library-facts { display: flex; flex-wrap: wrap; gap: .55rem 1.25rem; margin: 0; }
+.library-facts div { display: flex; gap: .35rem; }
+.library-facts dt, .library-detail-label { color: var(--muted); font-size: .78rem; font-weight: 800; text-transform: uppercase; }
+.library-facts dd { margin: 0; }
+.library-muted, .library-action-note { color: var(--muted); }
+.library-status-chip { display: inline-block; margin: 0 .3rem .3rem 0; padding: .25rem .55rem; border: 1px solid #aeb5b9; border-radius: 999px; font-size: .75rem; font-weight: 800; }
+.library-status-chip.status-active { border-color: #8db49a; background: #e4f2e7; color: #245532; }
+.library-status-chip.status-retired { background: #eceff0; color: #4c565b; }
+.library-status-chip.status-system { background: #e7e9f2; color: #303754; }
+.library-actions { display: flex; flex-wrap: wrap; align-items: start; gap: .45rem; min-width: 12rem; }
+.library-actions form { margin: 0; }
+.library-actions button { min-height: 2.6rem; padding: .5rem .8rem; }
+.button-secondary-light { border: 1px solid #89949a; background: #fff; color: #202426; }
+.button-secondary-light:hover { background: #eceff0; }
+.button-danger { border: 1px solid #a72e2e; background: #fff; color: #8a2222; }
+.button-danger:hover { background: #f9e6e3; }
+table { width: 100%; border-collapse: collapse; background: #fff; }
+caption { padding: .6rem; text-align: left; font-weight: 800; }
+th, td { padding: .7rem; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+td form { margin: 0; }
+.library-result, .empty-state { padding: .8rem 1rem; border-left: .3rem solid #687178; background: #eceff0; }
+.empty-state { margin: 1rem; }
+.empty-state h3, .empty-state p { margin: 0 0 .25rem; }
 
 @media (max-width: 40rem) {
   .public-shell { width: min(100% - 1rem, 58rem); padding: .5rem 0; }
@@ -77,6 +137,12 @@ a { color: #87431f; font-weight: 700; }
   .form-grid { grid-template-columns: 1fr; gap: 0; }
   .field-wide { grid-column: auto; }
   .fact-grid { grid-template-columns: 1fr; }
+  .library-pagehead, .library-preset-preview, .library-family-head { align-items: stretch; flex-direction: column; }
+  .library-filters { grid-template-columns: 1fr; }
+  .library-filter-button, .library-add-button { width: 100%; }
+  .library-actions button { width: auto; }
+  .library-dialog { width: 100%; height: 100%; max-height: 100%; border: 0; border-radius: 0; }
   button { width: 100%; }
+  .library-dialog-close { width: 2.75rem; }
   .submit-status { margin: .75rem 0 0; }
 }

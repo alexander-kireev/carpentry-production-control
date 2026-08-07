@@ -1,4 +1,4 @@
-<section class="timezone-correction" aria-labelledby="timezone-title">
+<section class="onboarding-card timezone-correction" aria-labelledby="timezone-title">
   <h2 id="timezone-title">Workshop timezone</h2>
   <p>Current timezone: <strong>{{ timezone_hint.timezone }}</strong></p>
   {% if timezone_status %}<div class="neutral-status" role="status">{{ timezone_status }}</div>{% endif %}
@@ -12,7 +12,7 @@
         {{ timezone_form.timezone }}{{ timezone_form.timezone.errors }}
       </div>
       <button type="submit">Correct timezone</button>
-      <span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Saving timezoneâ€¦</span>
+      <span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Saving timezone…</span>
     </form>
   {% else %}
     <p class="neutral-status">The one-time timezone correction is closed.</p>

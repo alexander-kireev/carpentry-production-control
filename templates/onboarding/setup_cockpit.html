@@ -19,6 +19,7 @@
   </dl>
   {% if invitation_status %}<p class="success-status" role="status">{{ invitation_status }}</p>{% endif %}
   {% if setup.delivery_status == "failed" %}<div class="form-status" role="status">The invitation is saved, but delivery failed. You can commit a fresh invitation below.</div>{% elif setup.delivery_status == "pending" %}<p class="neutral-status" role="status">Delivery is pending. The invitation remains safely saved.</p>{% else %}<p class="success-status" role="status">The email provider accepted the invitation for delivery. Inbox delivery is not yet confirmed.</p>{% endif %}
+  <p><a class="button-link" href="{% url 'workshops:libraries' %}">Configure workshop now</a></p><p><a href="{% url 'workshops:libraries' %}">Resume workshop setup</a></p>
 </section>
 <section class="onboarding-card recovery-card" aria-labelledby="resend-title">
   <p class="eyebrow">Invitation recovery</p>
@@ -26,7 +27,7 @@
   <p>This keeps the pending manager, creates a fresh 72-hour invitation, and makes the previous link unavailable.</p>
   <form method="post" data-submit-once>
     {% csrf_token %}{{ resend_form.invitation_action }}{{ resend_form.submission_nonce }}{{ resend_form.expected_workshop_version }}
-    <button type="submit">Confirm Resend</button><span class="submit-status" data-submit-status hidden>Committingâ€¦</span>
+    <button type="submit">Confirm resend</button><span class="submit-status" data-submit-status hidden>Committing…</span>
   </form>
 </section>
 {% if setup.can_replace %}<section class="onboarding-card recovery-card" aria-labelledby="replace-title">
@@ -41,7 +42,7 @@
       <div class="field"><label for="{{ replacement_form.date_of_birth.id_for_label }}">Date of birth</label>{{ replacement_form.date_of_birth }}{{ replacement_form.date_of_birth.errors }}</div>
       <div class="field"><label for="{{ replacement_form.email.id_for_label }}">Email</label>{{ replacement_form.email }}{{ replacement_form.email.errors }}</div>
     </div>
-    <button type="submit">Confirm replacement</button><span class="submit-status" data-submit-status hidden>Committingâ€¦</span>
+    <button type="submit">Confirm replacement</button><span class="submit-status" data-submit-status hidden>Committing…</span>
   </form>
 </section>{% endif %}
 {% include "onboarding/_timezone_correction.html" %}

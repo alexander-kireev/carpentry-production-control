@@ -504,5 +504,6 @@ def dashboard(request):
             "identity_user": resolution.user,
             "stage": "operational",
             "role_home": resolution.role_home,
+            "libraries_available": resolution.role_home in {"admin", "manager"},
         },
     )

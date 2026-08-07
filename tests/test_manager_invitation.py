@@ -11,7 +11,7 @@ from identity.models import (
     UserInvitation,
 )
 from identity.results import ResultCode
-from workshops.models import OperationType, Workshop, WorkshopRole
+from workshops.models import MaterialCategory, OperationType, Workshop, WorkshopRole
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -31,6 +31,10 @@ def attached_admin(*, email="admin@example.test"):
             "requires_clearance": False,
             "status": "active",
         },
+    )
+    MaterialCategory.objects.get_or_create(
+        machine_key="undefined",
+        defaults={"name": "undefined", "status": "active", "version": 1},
     )
     workshop = Workshop.objects.create(
         name="Invitation Workshop",

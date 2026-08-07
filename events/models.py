@@ -78,6 +78,33 @@ class Event(models.Model):
         ]
 
 
+class EventSubject(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.RESTRICT, related_name="subjects")
+    subject_type = models.TextField()
+    subject_id = models.BigIntegerField()
+    subject_role = models.TextField()
+
+    class Meta:
+        db_table = "event_subject"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("event", "subject_type", "subject_id", "subject_role"),
+                name="cst_686_event_subject_identity_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(subject_id__gt=0),
+                name="cst_687_event_subject_id_positive",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("subject_type", "subject_id", "-event"),
+                name="idx_126_event_subject_lookup",
+            ),
+            models.Index(fields=("event",), name="idx_127_event_subject_event"),
+        ]
+
+
 class EventNotificationIntent(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

@@ -12,7 +12,7 @@ from identity.models import (
     UserInvitation,
     WorkshopCreationCommandReceipt,
 )
-from workshops.models import OperationType, WorkshopRole
+from workshops.models import MaterialCategory, OperationType, WorkshopRole
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -32,6 +32,10 @@ def admin():
             "requires_clearance": False,
             "status": "active",
         },
+    )
+    MaterialCategory.objects.get_or_create(
+        machine_key="undefined",
+        defaults={"name": "undefined", "status": "active", "version": 1},
     )
     return User.objects.create_user(
         email="http-creator@example.test",
@@ -252,6 +256,11 @@ def test_cockpit_recovery_controls_resend_and_do_not_duplicate_on_refresh(client
     assert b"send a fresh invitation" in html
     assert b"replace pending manager" in html
     assert b"confirm resend" in html and b"confirm replacement" in html
+    rendered = page.content.decode()
+    assert '<section class="onboarding-card timezone-correction"' in rendered
+    assert "Saving timezone…" in rendered
+    assert "Committing…" in rendered
+    assert not any(token in rendered for token in ("Ã", "Â", "â€"))
     resend = page.context["resend_form"]
     response = client.post(
         "/onboarding",
