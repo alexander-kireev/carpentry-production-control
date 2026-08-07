@@ -1,0 +1,56 @@
+{% if materials %}
+<div class="table-scroll">
+  <table class="library-table materials-table">
+    <caption>Material catalogue for {{ workshop_name }}</caption>
+    <thead><tr><th scope="col">Material / Variant</th><th scope="col">Category and unit</th><th scope="col">Stock</th><th scope="col">Status</th>{% if can_mutate %}<th scope="col">Actions</th>{% endif %}</tr></thead>
+    <tbody>
+    {% for material in materials %}
+      <tr class="material-row">
+        <th scope="row">{% if can_mutate %}<a href="{% url 'workshops:material-detail' material.id %}">{{ material.name }}</a>{% else %}{{ material.name }}{% endif %}</th>
+        <td>{{ material.category }} · {{ material.unit }} ({{ material.unit_abbreviation }})</td>
+        <td>{% if pending_setup %}<span class="library-muted">Available after setup</span>{% else %}—{% endif %}</td>
+        <td><span class="library-status-chip status-{{ material.status }}">{{ material.status|title }}</span></td>
+        {% if can_mutate %}<td class="library-actions">
+          <button type="button" class="button-secondary-light" data-dialog-open="edit-material-{{ material.id }}">Edit</button>
+          {% if material.can_add_variant %}<button type="button" class="button-secondary-light" data-dialog-open="create-variant-{{ material.id }}">Add Variant</button>{% endif %}
+          {% if material.can_archive %}<button type="button" class="button-danger" data-dialog-open="retire-material-{{ material.id }}">Retire</button>
+          {% elif material.can_restore %}<form method="post" action="{% url 'workshops:material-transition' material.id 'restore' %}?q={{ filters.q|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;category={{ filters.category|urlencode }}" data-submit-once>{% csrf_token %}{{ material.transition_form.as_p }}<button type="submit">Restore</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Restoring material…</span></form>{% endif %}
+        </td>{% endif %}
+      </tr>
+      {% for variant in material.variants %}
+      <tr class="material-variant-row">
+        <th scope="row"><span aria-hidden="true">↳</span> {% if can_mutate %}<a href="{% url 'workshops:material-variant-detail' variant.id %}">{{ variant.label }}</a>{% else %}{{ variant.label }}{% endif %}</th>
+        <td>{{ material.unit_abbreviation }}</td>
+        <td>{% if pending_setup %}<span class="library-muted">Opening recorded; stock facts available after setup</span>{% else %}<dl class="library-facts"><div><dt>Current</dt><dd>{{ variant.current_stock }}</dd></div><div><dt>Reserved</dt><dd>{{ variant.reserved }}</dd></div><div><dt>Available</dt><dd>{{ variant.available }}</dd></div><div><dt>Threshold</dt><dd>{{ variant.min_threshold }}</dd></div></dl><span class="library-status-chip status-{{ variant.stock_status }}">{{ variant.stock_status|cut:"_"|title }}</span>{% endif %}</td>
+        <td><span class="library-status-chip status-{{ variant.status }}">{{ variant.status|title }}</span></td>
+        {% if can_mutate %}<td class="library-actions"><button type="button" class="button-secondary-light" data-dialog-open="edit-variant-{{ variant.id }}">Edit</button>{% if variant.can_archive %}<button type="button" class="button-danger" data-dialog-open="retire-variant-{{ variant.id }}">Retire</button>{% elif variant.can_restore %}<form method="post" action="{% url 'workshops:material-variant-transition' variant.id 'restore' %}?q={{ filters.q|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;category={{ filters.category|urlencode }}" data-submit-once>{% csrf_token %}{{ variant.transition_form.as_p }}<button type="submit">Restore</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Restoring Variant…</span></form>{% endif %}</td>{% endif %}
+      </tr>
+      {% endfor %}
+      {% if can_mutate %}
+      <tr class="dialog-host-row"><td colspan="5">
+        <dialog class="library-dialog" id="edit-material-{{ material.id }}" aria-labelledby="edit-material-{{ material.id }}-title"{% if material.auto_open_edit %} data-dialog-auto-open{% endif %}>
+          <div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close Material edit form">×</button><h2 id="edit-material-{{ material.id }}-title">Edit {{ material.name }}</h2>{% if material.edit_form.errors %}<div class="form-status" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}<form method="post" action="{% url 'workshops:material-edit' material.id %}?q={{ filters.q|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;category={{ filters.category|urlencode }}" data-submit-once data-material-dependencies novalidate>{% csrf_token %}<input type="hidden" name="version" value="{{ material.version }}">{{ material.edit_form.as_div }}<button type="submit">Save changes</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Saving Material…</span></form></div>
+        </dialog>
+        <dialog class="library-dialog" id="create-variant-{{ material.id }}" aria-labelledby="create-variant-{{ material.id }}-title"{% if material.auto_open_variant_create %} data-dialog-auto-open{% endif %}>
+          <div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close Variant create form">×</button><h2 id="create-variant-{{ material.id }}-title">Add Variant to {{ material.name }}</h2><p>An immutable opening balance is recorded even when quantity is zero.</p>{% if material.variant_create_form.errors %}<div class="form-status" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}<form method="post" action="{% url 'workshops:material-variant-create' material.id %}?q={{ filters.q|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;category={{ filters.category|urlencode }}" data-submit-once novalidate>{% csrf_token %}{{ material.variant_create_form.as_div }}<button type="submit">Save Variant</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Creating Variant…</span></form></div>
+        </dialog>
+        <dialog class="library-dialog library-confirm-dialog" id="retire-material-{{ material.id }}" aria-labelledby="retire-material-{{ material.id }}-title">
+          <div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close retirement confirmation">×</button><h2 id="retire-material-{{ material.id }}-title">Retire {{ material.name }}?</h2><p>Active Variants block retirement. Nothing is cascaded or deleted.</p><form method="post" action="{% url 'workshops:material-transition' material.id 'retire' %}?q={{ filters.q|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;category={{ filters.category|urlencode }}" data-submit-once>{% csrf_token %}{{ material.transition_form.as_p }}<button type="submit" class="button-danger">Confirm retirement</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Retiring Material…</span></form></div>
+        </dialog>
+        {% for variant in material.variants %}
+        <dialog class="library-dialog" id="edit-variant-{{ variant.id }}" aria-labelledby="edit-variant-{{ variant.id }}-title"{% if variant.auto_open_edit %} data-dialog-auto-open{% endif %}>
+          <div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close Variant edit form">×</button><h2 id="edit-variant-{{ variant.id }}-title">Edit {{ variant.label }}</h2>{% if variant.edit_form.errors %}<div class="form-status" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}<form method="post" action="{% url 'workshops:material-variant-edit' variant.id %}?q={{ filters.q|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;category={{ filters.category|urlencode }}" data-submit-once novalidate>{% csrf_token %}<input type="hidden" name="version" value="{{ variant.version }}">{{ variant.edit_form.as_div }}<button type="submit">Save changes</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Saving Variant…</span></form></div>
+        </dialog>
+        <dialog class="library-dialog library-confirm-dialog" id="retire-variant-{{ variant.id }}" aria-labelledby="retire-variant-{{ variant.id }}-title">
+          <div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close retirement confirmation">×</button><h2 id="retire-variant-{{ variant.id }}-title">Retire {{ variant.label }}?</h2><p>Future production and inbound-order guards will be enforced when those source tables exist. Nothing is deleted.</p><form method="post" action="{% url 'workshops:material-variant-transition' variant.id 'retire' %}?q={{ filters.q|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;category={{ filters.category|urlencode }}" data-submit-once>{% csrf_token %}{{ variant.transition_form.as_p }}<button type="submit" class="button-danger">Confirm retirement</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Retiring Variant…</span></form></div>
+        </dialog>
+        {% endfor %}
+      </td></tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state"><h2>No matching materials</h2><p>{% if filters.q or filters.status or filters.category %}No rows match the current filters.{% else %}Add the first Material to start the catalogue.{% endif %}</p></div>
+{% endif %}

@@ -319,6 +319,10 @@ def test_current_slice_library_and_event_subject_tables_exist():
         "workshop_role_default_clearance",
         "configuration_command_receipt",
         "event_subject",
+        "material",
+        "material_variant",
+        "stock_effect",
+        "material_command_receipt",
     } <= tables
     assert "user_invitation" in tables
     assert "email_delivery_intent" in tables
@@ -381,3 +385,15 @@ def test_sb05_migration_has_sequence_and_event_immutability_guard():
     )
     assert "CREATE SEQUENCE event_sequence_number_seq" in sql
     assert "CREATE TRIGGER trg_event_immutable" in sql
+
+
+def test_sc02_migration_guards_are_additive_and_reversible():
+    migration = importlib.import_module(
+        "workshops.migrations.0005_sc02_material_catalogue"
+    )
+    assert "CREATE TRIGGER cst_351_stock_projection_sync" in migration.GUARDS
+    assert "CREATE TRIGGER cst_367_material_receipt_immutable" in migration.GUARDS
+    assert (
+        "DROP FUNCTION IF EXISTS public.sc02_stock_projection_sync"
+        in migration.REVERSE_GUARDS
+    )

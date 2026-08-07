@@ -1,4 +1,6 @@
 import re
+from html import unescape
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from django.conf import settings
@@ -10,6 +12,7 @@ from events.models import Event
 from identity.models import User
 from tests.test_library_commands import library_admin
 from workshops.commands import (
+    FAMILY_MODELS,
     create_library_item,
     edit_library_item,
     transition_library_item,
@@ -74,6 +77,22 @@ def _assert_submit_hook(form, message):
         for attribute in ('role="status"', 'aria-live="polite"', "hidden")
     )
     assert message in text
+
+
+def _assert_canonical_library_navigation(client, content):
+    filter_form = re.search(
+        r'<form class="library-filters"[^>]*>', content, flags=re.DOTALL
+    ).group(0)
+    assert 'method="get"' in filter_form
+    assert f'action="{reverse("workshops:libraries")}"' in filter_form
+    links = [
+        unescape(link)
+        for link in re.findall(r'<a href="([^"]+)"', content)
+        if "family=" in link
+    ]
+    assert len(links) >= 5
+    assert all(urlsplit(link).path == reverse("workshops:libraries") for link in links)
+    assert all(client.get(link).status_code == 200 for link in links)
 
 
 def test_every_library_mutation_form_announces_and_suppresses_duplicate_submit():
@@ -162,7 +181,409 @@ def test_pending_admin_get_has_accessible_catalogue_and_no_trailing_slash():
     assert "Add from presets — unavailable" in content
     assert 'disabled aria-disabled="true"' in content
     assert '<dialog class="library-dialog"' in content
+    _assert_canonical_library_navigation(client, content)
     assert not any(token in content for token in ("Ã", "Â", "â€"))
+
+
+@pytest.mark.parametrize(
+    ("family", "payload"),
+    (
+        (
+            "workshop_role",
+            {
+                "submission_key": "32e06c57-402a-4476-b49a-f9c3c06ad570",
+                "name": "QA Finisher",
+                "description": "Finishing role",
+            },
+        ),
+        (
+            "operation_type",
+            {
+                "submission_key": "a39c125d-a950-4495-845e-5e131ef3fe7c",
+                "name": "QA Sanding",
+                "description": "Sanding operation",
+                "is_production": "on",
+                "requires_clearance": "on",
+            },
+        ),
+        (
+            "unit_type",
+            {
+                "submission_key": "47988331-4427-4f1a-bc1a-42c779546baa",
+                "name": "QA Metres",
+                "abbreviation": "qm",
+            },
+        ),
+        (
+            "material_category",
+            {
+                "submission_key": "2ec3fffb-75d7-4620-8b92-cadbaee85d12",
+                "name": "QA Sheet goods",
+            },
+        ),
+        (
+            "shift_definition",
+            {
+                "submission_key": "90635487-23e8-47e1-bc2a-ad6a16c725dc",
+                "name": "QA Early",
+                "start_time": "06:00",
+                "end_time": "14:00",
+                "days": ("0", "1", "2"),
+            },
+        ),
+    ),
+)
+def test_all_families_use_prg_retain_filters_and_flash_success_and_replay(
+    family, payload
+):
+    actor, workshop = library_admin(f"prg-{family}")
+    client = Client()
+    client.force_login(actor)
+    query = f"family={family}&status=active&q=QA%20%26%20filter"
+    before = client.get(f"/workshop/libraries?{query}")
+    assert before.status_code == 200
+    _assert_canonical_library_navigation(client, before.content.decode())
+
+    created = client.post(
+        f"/workshop/libraries/{family}/create?{query}", payload, follow=False
+    )
+    assert created.status_code == 302
+    location = created.headers["Location"]
+    assert urlsplit(location).path == reverse("workshops:libraries")
+    assert parse_qs(urlsplit(location).query) == {
+        "family": [family],
+        "status": ["active"],
+        "q": ["QA & filter"],
+    }
+    committed = client.get(location)
+    assert committed.status_code == 200
+    assert "Change committed." in committed.content.decode()
+    _assert_canonical_library_navigation(client, committed.content.decode())
+    assert "Change committed." not in client.get(location).content.decode()
+
+    replay = client.post(
+        f"/workshop/libraries/{family}/create?{query}", payload, follow=False
+    )
+    assert replay.status_code == 302 and replay.headers["Location"] == location
+    recovered = client.get(location)
+    assert "previously committed result was recovered" in recovered.content.decode()
+    assert (
+        FAMILY_MODELS[family]
+        .objects.filter(workshop=workshop, name=payload["name"])
+        .count()
+        == 1
+    )
+
+
+def _queue_library_success(client, suffix):
+    response = client.post(
+        "/workshop/libraries/unit_type/create?family=unit_type&status=active",
+        {
+            "submission_key": f"00000000-0000-4000-8000-{suffix:012d}",
+            "name": f"Queued unit {suffix}",
+            "abbreviation": f"q{suffix}",
+        },
+    )
+    assert response.status_code == 302
+
+
+def _assert_no_queued_success(client):
+    content = client.get("/workshop/libraries?family=unit_type").content.decode()
+    assert "Change committed." not in content
+    assert "previously committed result was recovered" not in content
+
+
+def test_rejected_authorized_posts_clear_older_unfollowed_success_feedback():
+    actor, workshop = library_admin("feedback-rejections")
+    unit = UnitType.objects.create(workshop=workshop, name="Metres", abbreviation="m")
+    role = WorkshopRole.objects.create(workshop=workshop, name="Assigned role")
+    User.objects.create_user(
+        email="feedback-blocker@example.test",
+        password="test-only-password",
+        first_name="Feedback",
+        last_name="Blocker",
+        date_of_birth="1992-01-01",
+        account_role=User.AccountRole.OPERATOR,
+        workshop=workshop,
+        workshop_role=role,
+        onboarding_state=None,
+        status=User.Status.ACTIVE,
+    )
+    _, foreign_workshop = library_admin("feedback-foreign")
+    foreign = UnitType.objects.create(
+        workshop=foreign_workshop, name="Foreign", abbreviation="f"
+    )
+    client = Client()
+    client.force_login(actor)
+
+    _queue_library_success(client, 1)
+    invalid = client.post(
+        "/workshop/libraries/unit_type/create?family=unit_type",
+        {
+            "submission_key": "00000000-0000-4000-8000-000000000101",
+            "name": "Invalid unit",
+            "abbreviation": "",
+        },
+    )
+    assert invalid.status_code == 400
+    _assert_no_queued_success(client)
+
+    _queue_library_success(client, 2)
+    stale = client.post(
+        f"/workshop/libraries/unit_type/{unit.id}/edit?family=unit_type",
+        {
+            "version": 99,
+            f"edit-unit_type-{unit.id}-name": "Metres",
+            f"edit-unit_type-{unit.id}-abbreviation": "stale",
+        },
+    )
+    assert stale.status_code == 200 and b"This row changed" in stale.content
+    _assert_no_queued_success(client)
+
+    _queue_library_success(client, 3)
+    blocked = client.post(
+        f"/workshop/libraries/workshop_role/{role.id}/retire?family=workshop_role",
+        {"version": 1},
+    )
+    assert blocked.status_code == 200 and b"action is unavailable" in blocked.content
+    _assert_no_queued_success(client)
+
+    _queue_library_success(client, 4)
+    unavailable = client.post(
+        f"/workshop/libraries/unit_type/{foreign.id}/edit?family=unit_type",
+        {
+            "version": 1,
+            f"edit-unit_type-{foreign.id}-name": "Foreign",
+            f"edit-unit_type-{foreign.id}-abbreviation": "x",
+        },
+    )
+    assert unavailable.status_code == 400
+    _assert_no_queued_success(client)
+
+
+def test_feedback_is_session_local_one_time_and_denied_post_cannot_consume_it():
+    actor, _ = library_admin("feedback-owner")
+    _, other_workshop = library_admin("feedback-other")
+    other_role = WorkshopRole.objects.create(
+        workshop=other_workshop, name="Other operator"
+    )
+    other = User.objects.create_user(
+        email="feedback-other@example.test",
+        password="test-only-password",
+        first_name="Other",
+        last_name="Operator",
+        date_of_birth="1992-01-01",
+        account_role=User.AccountRole.OPERATOR,
+        workshop=other_workshop,
+        workshop_role=other_role,
+        onboarding_state=None,
+        status=User.Status.ACTIVE,
+    )
+    owner = Client()
+    owner.force_login(actor)
+    separate = Client()
+    separate.force_login(other)
+
+    _queue_library_success(owner, 10)
+    denied = separate.post(
+        "/workshop/libraries/unit_type/create",
+        {
+            "submission_key": "00000000-0000-4000-8000-000000000011",
+            "name": "Denied",
+            "abbreviation": "d",
+        },
+    )
+    assert denied.status_code == 302
+    assert b"Change committed." not in denied.content
+    first = owner.get("/workshop/libraries?family=unit_type").content.decode()
+    second = owner.get("/workshop/libraries?family=unit_type").content.decode()
+    assert "Change committed." in first
+    assert "Change committed." not in second
+
+
+@pytest.mark.parametrize(
+    ("family", "payload", "retained"),
+    (
+        (
+            "workshop_role",
+            {
+                "submission_key": "9ff212a1-ee41-4bb0-9076-16c4cb8db84a",
+                "name": "",
+                "description": "Keep role detail",
+            },
+            "Keep role detail",
+        ),
+        (
+            "operation_type",
+            {
+                "submission_key": "71069fa5-2d5a-4eac-898d-88a5bbc200f1",
+                "name": "",
+                "description": "Keep operation detail",
+            },
+            "Keep operation detail",
+        ),
+        (
+            "unit_type",
+            {
+                "submission_key": "49460e0a-f6eb-48d4-8438-873d27b947ad",
+                "name": "Keep unit name",
+                "abbreviation": "",
+            },
+            "Keep unit name",
+        ),
+        (
+            "material_category",
+            {
+                "submission_key": "e918a2a7-a031-42f7-9e6a-fc1e76c34a4f",
+                "name": "",
+            },
+            "This field is required",
+        ),
+        (
+            "shift_definition",
+            {
+                "submission_key": "e103d21e-91af-43e3-aa25-c1746097eb34",
+                "name": "Keep shift name",
+                "start_time": "14:00",
+                "end_time": "06:00",
+                "days": ("0",),
+            },
+            "Keep shift name",
+        ),
+    ),
+)
+def test_all_family_invalid_forms_stay_bound_with_canonical_navigation(
+    family, payload, retained
+):
+    actor, _ = library_admin(f"invalid-nav-{family}")
+    client = Client()
+    client.force_login(actor)
+    response = client.post(
+        f"/workshop/libraries/{family}/create?family={family}&status=active&q=Keep",
+        payload,
+    )
+    content = response.content.decode()
+    assert response.status_code == 400
+    assert retained in content
+    assert f'id="create-{family}"' in content and "data-dialog-auto-open" in content
+    _assert_canonical_library_navigation(client, content)
+
+
+def test_role_clearances_are_accessible_checkboxes_and_submit_multiple_versions():
+    actor, workshop = library_admin("role-checkboxes")
+    sanding = OperationType.objects.create(
+        workshop=workshop,
+        name="Sanding",
+        is_production=True,
+        requires_clearance=True,
+    )
+    finishing = OperationType.objects.create(
+        workshop=workshop,
+        name="Finishing",
+        is_production=True,
+        requires_clearance=True,
+    )
+    client = Client()
+    client.force_login(actor)
+    page = client.get("/workshop/libraries?family=workshop_role")
+    content = page.content.decode()
+    checkboxes = re.findall(
+        r'<input[^>]+type="checkbox"[^>]+name="default_clearance_ids"[^>]*>',
+        content,
+    )
+    assert len(checkboxes) >= 4
+    assert all('class="library-checkbox-list"' in item for item in checkboxes)
+
+    response = client.post(
+        "/workshop/libraries/workshop_role/create?family=workshop_role",
+        {
+            "submission_key": "281bfa9e-bac5-4af4-a3a1-673fb43ca7b2",
+            "name": "Multi-clearance role",
+            "description": "Two defaults",
+            "default_clearance_ids": (str(sanding.id), str(finishing.id)),
+        },
+    )
+    assert response.status_code == 302
+    role = WorkshopRole.objects.get(workshop=workshop, name="Multi-clearance role")
+    assert set(
+        role.default_clearance_links.values_list("operation_type_id", flat=True)
+    ) == {sanding.id, finishing.id}
+
+
+def test_edit_retire_restore_prg_and_rejected_state_navigation_are_canonical():
+    actor, workshop = library_admin("action-prg")
+    unit = UnitType.objects.create(workshop=workshop, name="Metres", abbreviation="m")
+    client = Client()
+    client.force_login(actor)
+    query = "family=unit_type&status=active&q=Metres"
+    edited = client.post(
+        f"/workshop/libraries/unit_type/{unit.id}/edit?{query}",
+        {
+            "version": 1,
+            f"edit-unit_type-{unit.id}-name": "Metres",
+            f"edit-unit_type-{unit.id}-abbreviation": "lm",
+        },
+    )
+    assert edited.status_code == 302
+    assert parse_qs(urlsplit(edited.headers["Location"]).query) == {
+        "family": ["unit_type"],
+        "status": ["active"],
+        "q": ["Metres"],
+    }
+    assert (
+        "Change committed." in client.get(edited.headers["Location"]).content.decode()
+    )
+
+    retired = client.post(
+        f"/workshop/libraries/unit_type/{unit.id}/retire?{query}", {"version": 2}
+    )
+    assert retired.status_code == 302
+    client.get(retired.headers["Location"])
+    restored = client.post(
+        f"/workshop/libraries/unit_type/{unit.id}/restore?"
+        "family=unit_type&status=retired&q=Metres",
+        {"version": 3},
+    )
+    assert restored.status_code == 302
+    assert parse_qs(urlsplit(restored.headers["Location"]).query)["status"] == [
+        "retired"
+    ]
+
+    stale = client.post(
+        f"/workshop/libraries/unit_type/{unit.id}/edit?{query}",
+        {
+            "version": 1,
+            f"edit-unit_type-{unit.id}-name": "Metres",
+            f"edit-unit_type-{unit.id}-abbreviation": "stale",
+        },
+    )
+    assert stale.status_code == 200
+    stale_content = stale.content.decode()
+    assert "This row changed" in stale_content
+    _assert_canonical_library_navigation(client, stale_content)
+
+    role = WorkshopRole.objects.create(workshop=workshop, name="Assigned role")
+    User.objects.create_user(
+        email="assigned+action-prg@example.test",
+        password="test-only-password",
+        first_name="Assigned",
+        last_name="Operator",
+        date_of_birth="1992-01-01",
+        account_role=User.AccountRole.OPERATOR,
+        workshop=workshop,
+        workshop_role=role,
+        onboarding_state=None,
+        status=User.Status.ACTIVE,
+    )
+    blocked = client.post(
+        f"/workshop/libraries/workshop_role/{role.id}/retire?"
+        "family=workshop_role&status=active&q=Assigned",
+        {"version": 1},
+    )
+    assert blocked.status_code == 200
+    blocked_content = blocked.content.decode()
+    assert "action is unavailable" in blocked_content
+    _assert_canonical_library_navigation(client, blocked_content)
 
 
 def test_operator_direct_get_and_post_disclose_no_library_labels():

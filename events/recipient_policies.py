@@ -17,6 +17,10 @@ def resolve_recipients(event):
         "USER_INVITATION_ACCEPTED",
     } or event.event_type.endswith(("_CREATED", "_UPDATED", "_EDITED")):
         return []
+    if event.event_type == "MATERIAL_STOCK_REPLENISHED":
+        return _resolve_material_manager(
+            event, "Stock replenished", "Material stock was replenished."
+        )
     if event.event_type.endswith(("_RETIRED", "_RESTORED")):
         return _resolve_library_manager(event)
     if event.event_type != "WORKSHOP_BECAME_OPERATIONAL":
@@ -53,7 +57,9 @@ def resolve_recipients(event):
 
 def _resolve_library_manager(event):
     from workshops.models import (
+        Material,
         MaterialCategory,
+        MaterialVariant,
         OperationType,
         ShiftDefinition,
         UnitType,
@@ -66,6 +72,8 @@ def _resolve_library_manager(event):
         "unit_type": UnitType,
         "material_category": MaterialCategory,
         "shift_definition": ShiftDefinition,
+        "material": Material,
+        "material_variant": MaterialVariant,
     }
     model = models_by_type.get(event.primary_subject_type)
     if model is None or not event.primary_subject_id:
@@ -104,3 +112,34 @@ def _resolve_library_manager(event):
             body=f"A Workshop library {label.lower()} was {action}.",
         )
     ]
+
+
+def _resolve_material_manager(event, title, body):
+    from workshops.models import MaterialVariant
+
+    if event.primary_subject_type != "material_variant" or not event.primary_subject_id:
+        raise ValueError("Invalid material routing context")
+    try:
+        source = MaterialVariant.objects.get(pk=event.primary_subject_id)
+    except MaterialVariant.DoesNotExist as error:
+        raise ValueError("Invalid material routing context") from error
+    candidates = list(
+        User.objects.select_related("workshop_role").filter(
+            workshop_id=source.workshop_id,
+            account_role=User.AccountRole.MANAGER,
+            status=User.Status.ACTIVE,
+            onboarding_state__isnull=True,
+        )
+    )
+    exact = [
+        user
+        for user in candidates
+        if user.workshop_role is not None
+        and user.workshop_role.status == WorkshopRole.Status.ACTIVE
+        and user.workshop_role.machine_key != "admin"
+        and user.workshop_role.workshop_id in {None, source.workshop_id}
+        and user.id != event.actor_user_id
+    ]
+    if len(exact) > 1:
+        raise ValueError("Permanent manager routing is unavailable")
+    return [RecipientPresentation(exact[0].id, title, body)] if exact else []

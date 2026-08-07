@@ -1,8 +1,10 @@
 import uuid
+from urllib.parse import urlencode
 
 from django.db import models
 from django.http import Http404
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from identity.queries import resolve_authenticated_destination
@@ -10,12 +12,31 @@ from identity.queries import resolve_authenticated_destination
 from .commands import (
     FAMILY_MODELS,
     create_library_item,
+    create_material,
+    create_material_variant,
     edit_library_item,
+    edit_material,
+    edit_material_variant,
     transition_library_item,
+    transition_material,
+    transition_material_variant,
 )
-from .forms import FORM_CLASSES
+from .forms import (
+    FORM_CLASSES,
+    MaterialForm,
+    MaterialTransitionForm,
+    MaterialVariantForm,
+)
 from .models import OperationType
-from .queries import FAMILY_LABELS, get_libraries_catalogue, resolve_libraries_access
+from .queries import (
+    FAMILY_LABELS,
+    get_libraries_catalogue,
+    get_material_detail,
+    get_material_variant_detail,
+    get_materials_catalogue,
+    resolve_libraries_access,
+    resolve_materials_access,
+)
 
 
 def _denied(request):
@@ -132,7 +153,28 @@ def libraries(request):
     access = resolve_libraries_access(request.user)
     if access is None:
         return _denied(request)
-    return _render(request, access)
+    result = request.session.pop("library_feedback", None)
+    return _render(request, access, result=result)
+
+
+def _library_get_url(request, family):
+    query = urlencode(
+        {
+            "family": family,
+            "status": request.GET.get("status", ""),
+            "q": request.GET.get("q", ""),
+        }
+    )
+    return f"{reverse('workshops:libraries')}?{query}"
+
+
+def _library_success_redirect(request, family, result_code):
+    request.session["library_feedback"] = result_code
+    return redirect(_library_get_url(request, family))
+
+
+def _clear_pending_library_feedback(request):
+    request.session.pop("library_feedback", None)
 
 
 @require_POST
@@ -140,6 +182,7 @@ def library_create(request, family):
     access = resolve_libraries_access(request.user)
     if access is None or access.mode != "admin" or family not in FORM_CLASSES:
         return _denied(request)
+    _clear_pending_library_feedback(request)
     forms = _forms(access.workshop.id, family, request.POST)
     form = forms[family]
     if not form.is_valid():
@@ -165,6 +208,8 @@ def library_create(request, family):
         submission_key=submission_key,
         data=data,
     )
+    if result.code in {"success", "replay"}:
+        return _library_success_redirect(request, family, result.code)
     return _render(
         request,
         access,
@@ -179,6 +224,7 @@ def library_edit(request, family, item_id):
     access = resolve_libraries_access(request.user)
     if access is None or access.mode != "admin" or family not in FORM_CLASSES:
         return _denied(request)
+    _clear_pending_library_feedback(request)
     form = _edit_form(access.workshop.id, family, item_id, data=request.POST)
     if form is None:
         return _render(
@@ -221,6 +267,8 @@ def library_edit(request, family, item_id):
         expected_version=expected_version,
         data=data,
     )
+    if result.code in {"success", "replay"}:
+        return _library_success_redirect(request, family, result.code)
     return _render(request, access, result=result.code, selected_family=family)
 
 
@@ -229,6 +277,7 @@ def library_transition(request, family, item_id, action):
     access = resolve_libraries_access(request.user)
     if access is None or access.mode != "admin" or family not in FORM_CLASSES:
         return _denied(request)
+    _clear_pending_library_feedback(request)
     try:
         expected_version = int(request.POST.get("version", ""))
     except ValueError:
@@ -247,4 +296,314 @@ def library_transition(request, family, item_id, action):
         expected_version=expected_version,
         action=action,
     )
+    if result.code in {"success", "replay"}:
+        return _library_success_redirect(request, family, result.code)
     return _render(request, access, result=result.code, selected_family=family)
+
+
+def _material_forms(catalogue, *, bound=None, data=None):
+    initial_category = (
+        catalogue.get("categories", [{}])[0] if catalogue.get("categories") else {}
+    )
+    initial_unit = catalogue.get("units", [{}])[0] if catalogue.get("units") else {}
+    kwargs = {
+        "categories": catalogue.get("categories", ()),
+        "units": catalogue.get("units", ()),
+        "initial": {
+            "submission_key": uuid.uuid4(),
+            "category_id": initial_category.get("id"),
+            "category_version": initial_category.get("version"),
+            "unit_id": initial_unit.get("id"),
+            "unit_version": initial_unit.get("version"),
+        },
+    }
+    if bound == "create-material":
+        kwargs["data"] = data
+    return MaterialForm(**kwargs)
+
+
+def _decorate_material_forms(catalogue, *, bound=None, data=None):
+    if catalogue["mode"] != "admin":
+        return
+    for material in catalogue["materials"]:
+        material["auto_open_edit"] = bound == f"edit-material-{material['id']}"
+        material["auto_open_variant_create"] = (
+            bound == f"create-variant-{material['id']}"
+        )
+        material["variant_create_form"] = MaterialVariantForm(
+            data=data if bound == f"create-variant-{material['id']}" else None,
+            initial={
+                "submission_key": uuid.uuid4(),
+                "material_version": material["version"],
+            },
+        )
+        material["edit_form"] = MaterialForm(
+            data=data if bound == f"edit-material-{material['id']}" else None,
+            edit=True,
+            categories=catalogue["categories"],
+            units=catalogue["units"],
+            initial={
+                "submission_key": uuid.uuid4(),
+                "name": material["name"],
+                "category_id": material["category_id"],
+                "category_version": material["category_version"],
+                "unit_id": material["unit_id"],
+                "unit_version": material["unit_version"],
+            },
+        )
+        material["transition_form"] = MaterialTransitionForm(
+            initial={"submission_key": uuid.uuid4(), "version": material["version"]}
+        )
+        for variant in material["variants"]:
+            variant["auto_open_edit"] = bound == f"edit-variant-{variant['id']}"
+            variant["edit_form"] = MaterialVariantForm(
+                data=data if bound == f"edit-variant-{variant['id']}" else None,
+                edit=True,
+                initial={
+                    "submission_key": uuid.uuid4(),
+                    "spec_label": variant["label"],
+                    "min_threshold": variant.get("min_threshold"),
+                },
+            )
+            variant["transition_form"] = MaterialTransitionForm(
+                initial={"submission_key": uuid.uuid4(), "version": variant["version"]}
+            )
+
+
+def _render_materials(
+    request, access, *, result=None, bound=None, data=None, status=200
+):
+    catalogue = get_materials_catalogue(
+        access.actor,
+        search=request.GET.get("q", ""),
+        status=request.GET.get("status"),
+        category_id=request.GET.get("category"),
+    )
+    _decorate_material_forms(catalogue, bound=bound, data=data)
+    context = {
+        **catalogue,
+        "identity_user": access.actor,
+        "result": result,
+        "material_form": _material_forms(catalogue, bound=bound, data=data)
+        if catalogue["mode"] == "admin"
+        else None,
+        "open_dialog": bound,
+    }
+    template = (
+        "workshops/materials_admin.html"
+        if access.mode == "admin"
+        else "workshops/materials_readonly.html"
+    )
+    return render(request, template, context, status=status)
+
+
+@require_GET
+def materials(request):
+    access = resolve_materials_access(request.user)
+    if access is None:
+        return _denied(request)
+    return _render_materials(request, access)
+
+
+@require_GET
+def material_detail(request, material_id):
+    access = resolve_materials_access(request.user)
+    if access is None:
+        return _denied(request)
+    projection = get_material_detail(access.actor, material_id)
+    if projection is None:
+        raise Http404
+    return render(
+        request,
+        "workshops/material_detail.html",
+        {**projection, "identity_user": access.actor},
+    )
+
+
+@require_GET
+def material_variant_detail(request, variant_id):
+    access = resolve_materials_access(request.user)
+    if access is None:
+        return _denied(request)
+    projection = get_material_variant_detail(access.actor, variant_id)
+    if projection is None:
+        raise Http404
+    return render(
+        request,
+        "workshops/material_variant_detail.html",
+        {**projection, "identity_user": access.actor},
+    )
+
+
+def _material_result_status(result):
+    return 400 if result.code in {"invalid", "stale", "blocked", "unavailable"} else 200
+
+
+@require_POST
+def material_create(request):
+    access = resolve_materials_access(request.user)
+    if access is None or access.mode != "admin":
+        return _denied(request)
+    catalogue = get_materials_catalogue(access.actor)
+    form = MaterialForm(
+        request.POST,
+        categories=catalogue["categories"],
+        units=catalogue["units"],
+    )
+    if not form.is_valid():
+        return _render_materials(
+            request,
+            access,
+            result="invalid",
+            bound="create-material",
+            data=request.POST,
+            status=400,
+        )
+    data = dict(form.cleaned_data)
+    key = str(data.pop("submission_key"))
+    result = create_material(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        submission_key=key,
+        data=data,
+    )
+    return _render_materials(
+        request, access, result=result.code, status=_material_result_status(result)
+    )
+
+
+@require_POST
+def material_edit(request, material_id):
+    access = resolve_materials_access(request.user)
+    if access is None or access.mode != "admin":
+        return _denied(request)
+    catalogue = get_materials_catalogue(access.actor)
+    form = MaterialForm(
+        request.POST,
+        edit=True,
+        categories=catalogue["categories"],
+        units=catalogue["units"],
+    )
+    if not form.is_valid():
+        return _render_materials(
+            request,
+            access,
+            result="invalid",
+            bound=f"edit-material-{material_id}",
+            data=request.POST,
+            status=400,
+        )
+    data = dict(form.cleaned_data)
+    key = str(data.pop("submission_key"))
+    result = edit_material(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        material_id=material_id,
+        expected_version=request.POST.get("version"),
+        idempotency_key=key,
+        data=data,
+    )
+    return _render_materials(
+        request, access, result=result.code, status=_material_result_status(result)
+    )
+
+
+@require_POST
+def material_transition(request, material_id, action):
+    access = resolve_materials_access(request.user)
+    if access is None or access.mode != "admin" or action not in {"retire", "restore"}:
+        return _denied(request)
+    form = MaterialTransitionForm(request.POST)
+    if not form.is_valid():
+        return _render_materials(request, access, result="invalid", status=400)
+    result = transition_material(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        material_id=material_id,
+        expected_version=form.cleaned_data["version"],
+        idempotency_key=str(form.cleaned_data["submission_key"]),
+        action="archive" if action == "retire" else "restore",
+    )
+    return _render_materials(
+        request, access, result=result.code, status=_material_result_status(result)
+    )
+
+
+@require_POST
+def material_variant_create(request, material_id):
+    access = resolve_materials_access(request.user)
+    if access is None or access.mode != "admin":
+        return _denied(request)
+    form = MaterialVariantForm(request.POST)
+    if not form.is_valid():
+        return _render_materials(
+            request,
+            access,
+            result="invalid",
+            bound=f"create-variant-{material_id}",
+            data=request.POST,
+            status=400,
+        )
+    data = dict(form.cleaned_data)
+    key = str(data.pop("submission_key"))
+    result = create_material_variant(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        material_id=material_id,
+        submission_key=key,
+        data=data,
+    )
+    return _render_materials(
+        request, access, result=result.code, status=_material_result_status(result)
+    )
+
+
+@require_POST
+def material_variant_edit(request, variant_id):
+    access = resolve_materials_access(request.user)
+    if access is None or access.mode != "admin":
+        return _denied(request)
+    form = MaterialVariantForm(request.POST, edit=True)
+    if not form.is_valid():
+        return _render_materials(
+            request,
+            access,
+            result="invalid",
+            bound=f"edit-variant-{variant_id}",
+            data=request.POST,
+            status=400,
+        )
+    data = dict(form.cleaned_data)
+    key = str(data.pop("submission_key"))
+    result = edit_material_variant(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        variant_id=variant_id,
+        expected_version=request.POST.get("version"),
+        idempotency_key=key,
+        data=data,
+    )
+    return _render_materials(
+        request, access, result=result.code, status=_material_result_status(result)
+    )
+
+
+@require_POST
+def material_variant_transition(request, variant_id, action):
+    access = resolve_materials_access(request.user)
+    if access is None or access.mode != "admin" or action not in {"retire", "restore"}:
+        return _denied(request)
+    form = MaterialTransitionForm(request.POST)
+    if not form.is_valid():
+        return _render_materials(request, access, result="invalid", status=400)
+    result = transition_material_variant(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        variant_id=variant_id,
+        expected_version=form.cleaned_data["version"],
+        idempotency_key=str(form.cleaned_data["submission_key"]),
+        action="archive" if action == "retire" else "restore",
+    )
+    return _render_materials(
+        request, access, result=result.code, status=_material_result_status(result)
+    )

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Materials | Carpentry Production Control{% endblock %}
+{% block content %}
+<section class="library-shell materials-shell" aria-labelledby="materials-title">
+  <header class="library-pagehead"><div><p class="eyebrow">Workshop catalogue</p><h1 id="materials-title">Materials</h1><p class="library-purpose">Current material and stock facts for {{ workshop_name }}.</p></div><span class="library-context">Read-only</span></header>
+  <form class="library-filters" method="get" role="search"><div><label for="materials-search">Search materials</label><input id="materials-search" name="q" type="search" value="{{ filters.q }}"></div><div><label for="materials-status">Status</label><select id="materials-status" name="status"><option value="">All</option><option value="active"{% if filters.status == 'active' %} selected{% endif %}>Active</option><option value="archived"{% if filters.status == 'archived' %} selected{% endif %}>Retired</option></select></div><button type="submit">Apply filters</button></form>
+  {% include "workshops/_material_rows.html" with can_mutate=False %}
+</section>
+{% endblock %}

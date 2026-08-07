@@ -33,6 +33,11 @@ class PreWorkshopAccessMiddleware:
 
             if resolve_libraries_access(request.user) is not None:
                 return self.get_response(request)
+        if path == "/workshop/materials" or path.startswith("/workshop/materials/"):
+            from workshops.queries import resolve_materials_access
+
+            if resolve_materials_access(request.user) is not None:
+                return self.get_response(request)
         if path not in allowed:
             return redirect(resolution.destination.value)
         return self.get_response(request)

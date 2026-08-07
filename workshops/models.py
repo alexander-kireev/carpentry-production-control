@@ -459,3 +459,306 @@ class ConfigurationCommandReceipt(models.Model):
                 name="idx_125_configuration_receipt",
             )
         ]
+
+
+class Material(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        ARCHIVED = "archived", "Archived"
+
+    workshop = models.ForeignKey(
+        Workshop, on_delete=models.RESTRICT, related_name="materials"
+    )
+    name = models.TextField()
+    category = models.ForeignKey(
+        MaterialCategory, on_delete=models.RESTRICT, related_name="materials"
+    )
+    unit = models.ForeignKey(
+        UnitType, on_delete=models.RESTRICT, related_name="materials"
+    )
+    status = models.TextField(
+        choices=Status.choices, default=Status.ACTIVE, db_default="active"
+    )
+    version = models.PositiveIntegerField(default=1, db_default=1)
+
+    class Meta:
+        db_table = "material"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(name=""), name="cst_313_material_name_nonblank"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("active", "archived")),
+                name="cst_314_material_status",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(version__gt=0), name="cst_315_material_version"
+            ),
+            models.UniqueConstraint(
+                Lower("name"), "workshop", name="cst_316_material_name_uniq"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("workshop", "status"), name="idx_069_material_scope"),
+            models.Index(fields=("unit",), name="idx_070_material_unit"),
+            models.Index(fields=("category",), name="idx_071_material_category"),
+        ]
+
+
+class MaterialVariant(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        ARCHIVED = "archived", "Archived"
+
+    workshop = models.ForeignKey(
+        Workshop, on_delete=models.RESTRICT, related_name="material_variants"
+    )
+    material = models.ForeignKey(
+        Material, on_delete=models.RESTRICT, related_name="variants"
+    )
+    spec_label = models.TextField()
+    current_stock = models.DecimalField(
+        max_digits=14, decimal_places=4, default=0, db_default=0
+    )
+    min_threshold = models.DecimalField(max_digits=14, decimal_places=4)
+    status = models.TextField(
+        choices=Status.choices, default=Status.ACTIVE, db_default="active"
+    )
+    version = models.PositiveIntegerField(default=1, db_default=1)
+
+    class Meta:
+        db_table = "material_variant"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(spec_label=""),
+                name="cst_324_material_variant_label",
+            ),
+            models.UniqueConstraint(
+                Lower("spec_label"),
+                "material",
+                name="cst_325_material_variant_label_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(current_stock__gte=0),
+                name="cst_326_material_variant_stock",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(min_threshold__gte=0),
+                name="cst_327_material_variant_threshold",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("active", "archived")),
+                name="cst_328_material_variant_status",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(version__gt=0),
+                name="cst_329_material_variant_version",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("material", "status"), name="idx_072_variant_material"
+            ),
+            models.Index(
+                fields=("workshop", "status"), name="idx_073_variant_workshop"
+            ),
+        ]
+
+
+class StockEffect(models.Model):
+    workshop = models.ForeignKey(
+        Workshop, on_delete=models.RESTRICT, related_name="stock_effects"
+    )
+    material_variant = models.ForeignKey(
+        MaterialVariant, on_delete=models.RESTRICT, related_name="stock_effects"
+    )
+    effect_type = models.TextField()
+    source_type = models.TextField()
+    command_identity = models.TextField()
+    correlation_identity = models.TextField()
+    source_identity = models.BigIntegerField(null=True, blank=True)
+    source_version = models.IntegerField(null=True, blank=True)
+    actor_or_system = models.ForeignKey(
+        "identity.User",
+        null=True,
+        blank=True,
+        on_delete=models.RESTRICT,
+        related_name="stock_effects",
+    )
+    delta = models.DecimalField(max_digits=14, decimal_places=4)
+    balance_before = models.DecimalField(max_digits=14, decimal_places=4)
+    balance_after = models.DecimalField(max_digits=14, decimal_places=4)
+    reason = models.TextField(null=True, blank=True)
+    category = models.TextField(null=True, blank=True)
+    stock_projection_version = models.PositiveIntegerField()
+    accepted_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+
+    class Meta:
+        db_table = "stock_effect"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    effect_type__in=(
+                        "opening_balance",
+                        "operation_consumption",
+                        "purchase_order_arrival",
+                        "stock_write_off",
+                        "manual_adjustment",
+                    )
+                ),
+                name="cst_335_stock_effect_type",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    source_type__in=(
+                        "material_variant_creation",
+                        "operation_material_settlement",
+                        "purchase_order_arrival",
+                        "stock_write_off",
+                        "manual_adjustment",
+                    )
+                ),
+                name="cst_336_stock_effect_source",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        effect_type="opening_balance",
+                        source_type="material_variant_creation",
+                    )
+                    | models.Q(
+                        effect_type="operation_consumption",
+                        source_type="operation_material_settlement",
+                    )
+                    | models.Q(
+                        effect_type="purchase_order_arrival",
+                        source_type="purchase_order_arrival",
+                    )
+                    | models.Q(
+                        effect_type="stock_write_off",
+                        source_type="stock_write_off",
+                    )
+                    | models.Q(
+                        effect_type="manual_adjustment",
+                        source_type="manual_adjustment",
+                    )
+                ),
+                name="cst_337_stock_effect_pair",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(source_version__isnull=True)
+                | models.Q(source_version__gte=0),
+                name="cst_340_stock_effect_source_version",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(actor_or_system__isnull=False)
+                | models.Q(effect_type="purchase_order_arrival"),
+                name="cst_341_stock_effect_actor",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        effect_type__in=("operation_consumption", "stock_write_off"),
+                        delta__lt=0,
+                    )
+                    | models.Q(effect_type="purchase_order_arrival", delta__gt=0)
+                    | models.Q(effect_type="opening_balance", delta__gte=0)
+                    | models.Q(effect_type="manual_adjustment") & ~models.Q(delta=0)
+                ),
+                name="cst_342_stock_effect_sign",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(balance_before__gte=0),
+                name="cst_343_stock_effect_before",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    balance_after=models.F("balance_before") + models.F("delta")
+                )
+                & models.Q(balance_after__gte=0),
+                name="cst_344_stock_effect_balance",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(effect_type__in=("stock_write_off", "manual_adjustment"))
+                    & models.Q(reason__isnull=False)
+                    & ~models.Q(reason="")
+                )
+                | (
+                    ~models.Q(effect_type__in=("stock_write_off", "manual_adjustment"))
+                    & models.Q(reason__isnull=True)
+                ),
+                name="cst_345_stock_effect_reason",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(stock_projection_version__gt=0),
+                name="cst_347_stock_effect_projection_version",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("material_variant", "accepted_at"),
+                name="idx_074_effect_variant_time",
+            ),
+            models.Index(
+                fields=("source_type", "source_identity"),
+                condition=models.Q(source_identity__isnull=False),
+                name="idx_075_effect_source",
+            ),
+            models.Index(
+                fields=("correlation_identity",), name="idx_076_effect_correlation"
+            ),
+        ]
+
+
+class MaterialCommandReceipt(models.Model):
+    workshop = models.ForeignKey(
+        Workshop, on_delete=models.RESTRICT, related_name="material_receipts"
+    )
+    target_type = models.TextField()
+    target_id = models.BigIntegerField()
+    actor_user = models.ForeignKey(
+        "identity.User",
+        on_delete=models.RESTRICT,
+        related_name="material_receipts",
+    )
+    idempotency_key = models.TextField()
+    command_family = models.TextField()
+    request_fingerprint = models.TextField()
+    result_version = models.PositiveIntegerField()
+    result_summary = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(db_default=RawSQL("now()", ()))
+
+    class Meta:
+        db_table = "material_command_receipt"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(target_type__in=("material", "material_variant")),
+                name="cst_362_material_receipt_target",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    command_family__in=("edit", "archive", "restore", "manual_count")
+                ),
+                name="cst_364_material_receipt_family",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        command_family="manual_count", target_type="material_variant"
+                    )
+                    | ~models.Q(command_family="manual_count")
+                    & models.Q(target_type__in=("material", "material_variant"))
+                ),
+                name="cst_365_material_receipt_pair",
+            ),
+            models.UniqueConstraint(
+                fields=("workshop", "actor_user", "idempotency_key"),
+                name="cst_366_material_receipt_key_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("target_type", "target_id"), name="idx_078_material_receipt"
+            )
+        ]

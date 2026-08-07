@@ -92,6 +92,10 @@ a { color: #87431f; font-weight: 700; }
 .library-form-panel { position: relative; padding: 1.5rem; background: #fff; overflow-y: auto; }
 .library-dialog-close { position: absolute; top: .75rem; right: .75rem; min-width: 2.75rem; min-height: 2.75rem; padding: .3rem; border: 1px solid #89949a; background: #fff; color: #202426; font-size: 1.4rem; }
 .library-dialog-close:hover { background: #eceff0; }
+.library-form-panel label:has(input.library-checkbox-list) { display: flex; align-items: center; gap: .65rem; min-height: 2.75rem; padding: .35rem .5rem; border-radius: .35rem; cursor: pointer; }
+.library-form-panel label:has(input.library-checkbox-list):hover { background: #f1f2f3; }
+input.library-checkbox-list { flex: 0 0 auto; width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--graphite); }
+input.library-checkbox-list:focus-visible { outline: .18rem solid #315f87; outline-offset: .18rem; }
 .library-confirm-dialog { width: min(32rem, calc(100% - 2rem)); }
 .library-confirm-actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.25rem; }
 .library-confirm-actions form { margin: 0; }
@@ -125,6 +129,18 @@ td form { margin: 0; }
 .library-result, .empty-state { padding: .8rem 1rem; border-left: .3rem solid #687178; background: #eceff0; }
 .empty-state { margin: 1rem; }
 .empty-state h3, .empty-state p { margin: 0 0 .25rem; }
+.materials-toolbar { margin-top: 1rem; }
+.materials-toolbar .library-filters { grid-template-columns: minmax(14rem, 1fr) minmax(8rem, .35fr) minmax(10rem, .45fr) auto; }
+.materials-table .material-row th { font-size: 1.05rem; }
+.materials-table .material-variant-row th { padding-left: 1.5rem; font-weight: 650; }
+.materials-table .material-variant-row { background: #fafafa; }
+.materials-table .dialog-host-row > td { height: 0; padding: 0; border: 0; }
+.library-status-chip.status-archived { background: #eceff0; color: #4c565b; }
+.library-status-chip.status-healthy { border-color: #8db49a; background: #e4f2e7; color: #245532; }
+.library-status-chip.status-low_available { border-color: #c89d48; background: #fff5d9; color: #674a11; }
+.library-status-chip.status-out_of_stock { border-color: #c57979; background: #f9e6e3; color: #741d1d; }
+.detail-list { display: grid; gap: .6rem; padding-left: 1.25rem; }
+.setup-configuration-links { display: flex; flex-wrap: wrap; gap: .65rem; }
 
 @media (max-width: 40rem) {
   .public-shell { width: min(100% - 1rem, 58rem); padding: .5rem 0; }
@@ -139,6 +155,7 @@ td form { margin: 0; }
   .fact-grid { grid-template-columns: 1fr; }
   .library-pagehead, .library-preset-preview, .library-family-head { align-items: stretch; flex-direction: column; }
   .library-filters { grid-template-columns: 1fr; }
+  .materials-toolbar .library-filters { grid-template-columns: 1fr; }
   .library-filter-button, .library-add-button { width: 100%; }
   .library-actions button { width: auto; }
   .library-dialog { width: 100%; height: 100%; max-height: 100%; border: 0; border-radius: 0; }
