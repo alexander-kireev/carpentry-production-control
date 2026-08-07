@@ -1,10 +1,36 @@
 from django.utils import timezone
 
+from events.models import Event
 from workshops.models import Workshop, WorkshopRole
 
 from .models import EmailDeliveryIntent, User, UserInvitation
 from .results import Destination, DestinationResult, InvitationEnvelope
 from .security import invitation_credential_shape, invitation_token_matches
+
+
+def candidate_has_product_history(candidate):
+    """Return whether a pending candidate has non-invitation participation."""
+    if (
+        Event.objects.filter(actor_user_id=candidate.id).exists()
+        or Event.objects.filter(
+            primary_subject_type="user", primary_subject_id=candidate.id
+        ).exists()
+    ):
+        return True
+    allowed = {"invitations", "manager_invitation_receipt"}
+    for relation in candidate._meta.related_objects:
+        accessor = relation.get_accessor_name()
+        if accessor in allowed:
+            continue
+        if relation.one_to_one:
+            try:
+                getattr(candidate, accessor)
+            except relation.related_model.DoesNotExist:
+                continue
+            return True
+        if getattr(candidate, accessor).exists():
+            return True
+    return False
 
 
 def resolve_authenticated_destination(user):
@@ -72,10 +98,20 @@ def resolve_authenticated_destination(user):
 
 
 def get_pending_manager_setup(user):
+    try:
+        user = User.objects.select_related("workshop", "workshop_role").get(pk=user.pk)
+    except User.DoesNotExist:
+        return None
     if not (
         user.account_role == User.AccountRole.ADMIN
         and user.status == User.Status.ACTIVE
+        and user.onboarding_state is None
         and user.workshop_id is not None
+        and user.workshop_role is not None
+        and user.workshop_role.workshop_id is None
+        and user.workshop_role.machine_key == "admin"
+        and user.workshop_role.name == "Admin"
+        and user.workshop_role.status == WorkshopRole.Status.ACTIVE
         and user.workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING
     ):
         return None
@@ -115,13 +151,28 @@ def get_pending_manager_setup(user):
     if len(intents) != 1:
         return None
     intent = intents[0]
+    if intent.status not in {
+        EmailDeliveryIntent.Status.PENDING,
+        EmailDeliveryIntent.Status.SENT,
+        EmailDeliveryIntent.Status.FAILED,
+    }:
+        return None
+    now = timezone.now()
     return {
         "workshop_name": user.workshop.name,
         "workshop_timezone": user.workshop.timezone,
+        "workshop_version": user.workshop.version,
         "candidate_name": f"{candidate.first_name} {candidate.last_name}",
         "candidate_email": candidate.email,
+        "issued_at": invitation.issued_at,
         "expires_at": invitation.expires_at,
+        "expired": now > invitation.expires_at,
         "delivery_status": intent.status,
+        "can_resend": True,
+        "can_replace": (
+            not candidate.has_usable_password()
+            and not candidate_has_product_history(candidate)
+        ),
     }
 
 

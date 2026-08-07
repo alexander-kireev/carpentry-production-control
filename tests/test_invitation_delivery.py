@@ -3,7 +3,10 @@ from django.conf import settings
 from django.db import connection
 
 from identity import delivery
-from identity.commands import invite_permanent_manager
+from identity.commands import (
+    invite_permanent_manager,
+    resend_permanent_manager_invitation,
+)
 from identity.models import EmailDeliveryIntent
 from identity.results import ResultCode
 from tests.test_manager_invitation import attached_admin, payload
@@ -66,6 +69,42 @@ def test_stale_callback_changes_zero_rows(monkeypatch):
     )
     intent.refresh_from_db()
     assert intent.status == "sent"
+
+
+def test_resend_generation_delivery_is_commit_first_and_generation_safe(monkeypatch):
+    calls = []
+
+    def provider(**message):
+        assert not connection.in_atomic_block
+        calls.append(message)
+
+    monkeypatch.setattr(delivery, "_deliver", provider)
+    admin, workshop, _ = attached_admin()
+    initial = invite_permanent_manager(
+        actor_id=admin.id, data=payload(), idempotency_key="generation-initial"
+    )
+    workshop.refresh_from_db()
+    old_intent = EmailDeliveryIntent.objects.get(invitation_generation=1)
+    result = resend_permanent_manager_invitation(
+        actor_id=admin.id,
+        data={
+            "invitation_action": "resend",
+            "submission_nonce": "generation-resend",
+            "expected_workshop_version": workshop.version,
+        },
+        idempotency_key="generation-resend",
+    )
+    assert result.code == ResultCode.SUCCESS and len(calls) == 2
+    new_intent = EmailDeliveryIntent.objects.get(invitation_generation=2)
+    assert new_intent.status == "sent" and new_intent.attempt_count == 1
+    assert not delivery._record_outcome(
+        intent_id=old_intent.id,
+        invitation_id=initial.invitation.id,
+        generation=1,
+        status="failed",
+    )
+    new_intent.refresh_from_db()
+    assert new_intent.status == "sent"
 
 
 class SMTPDouble:

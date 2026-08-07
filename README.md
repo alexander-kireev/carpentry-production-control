@@ -271,9 +271,14 @@ pending permanent-manager account, generation-one invitation and delivery eviden
 The source transaction commits before the generation-bound delivery worker claims
 the email once and performs external I/O outside database locks. Delivery failure
 does not undo the invitation. `/onboarding` shows the administrator the safe
-pending/sent/failed state; it deliberately has no Resend or replacement controls
-yet. Active operators wait at `/onboarding/holding`, and operational identities
-reach the data-free `/dashboard` handoff.
+current pending/sent/failed state and derived expiry. Resend retains the
+candidate, rotates the credential and generation, invalidates the previous
+link, and sends only after commit. Replacement atomically swaps a pending,
+never-activated candidate only when that candidate has no product history; no
+old candidate snapshot or audit row is retained. Both actions are
+version-aware, Event- and Notification-silent, and expose no credential or
+receipt data. Active operators wait at `/onboarding/holding`, and operational
+identities reach the data-free `/dashboard` handoff.
 
 The default `memory` invitation adapter is non-networked and intended for CI,
 local and integration work. The explicit `failing` adapter exercises

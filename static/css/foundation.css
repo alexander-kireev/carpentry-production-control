@@ -63,6 +63,8 @@ a { color: #87431f; font-weight: 700; }
 .invitation-context div { padding: .8rem; border: 1px solid var(--line); background: #fff; }
 .invitation-context dt { color: var(--muted); font-size: .75rem; font-weight: 800; text-transform: uppercase; }
 .invitation-context dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
+.recovery-card { margin-top: 1rem; }
+.recovery-card h2 { margin-bottom: .35rem; }
 
 @media (max-width: 40rem) {
   .public-shell { width: min(100% - 1rem, 58rem); padding: .5rem 0; }

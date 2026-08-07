@@ -22,6 +22,8 @@ from .delivery import schedule_invitation_delivery
 from .forms import (
     InvitationAcceptanceForm,
     PermanentManagerInvitationForm,
+    PermanentManagerReplacementForm,
+    PermanentManagerResendForm,
     RegistrationForm,
     WorkshopCreationForm,
     WorkshopTimezoneCorrectionForm,
@@ -34,6 +36,7 @@ from .models import (
     UserInvitation,
     WorkshopCreationCommandReceipt,
 )
+from .queries import candidate_has_product_history
 from .results import CommandResult, ResultCode
 from .security import (
     check_activation_code,
@@ -532,6 +535,373 @@ def invite_permanent_manager(*, actor_id, data, idempotency_key):
     return _invite_permanent_manager_validated(
         actor_id=actor_id, form=form, idempotency_key=idempotency_key
     )
+
+
+def _lock_pending_manager_aggregate(*, workshop_id, actor_id):
+    workshop = Workshop.objects.select_for_update().get(pk=workshop_id)
+    permanent_users = list(
+        User.objects.select_for_update()
+        .filter(
+            workshop=workshop,
+            account_role__in=(User.AccountRole.ADMIN, User.AccountRole.MANAGER),
+        )
+        .order_by("id")
+    )
+    invitations = list(
+        UserInvitation.objects.select_for_update().filter(
+            workshop=workshop, status=UserInvitation.Status.PENDING
+        )
+    )
+    protected = resolve_protected_configuration()
+    admins = [
+        user
+        for user in permanent_users
+        if user.account_role == User.AccountRole.ADMIN
+        and user.status == User.Status.ACTIVE
+        and user.onboarding_state is None
+        and user.workshop_role_id == protected.admin_role.id
+    ]
+    managers = [
+        user
+        for user in permanent_users
+        if user.account_role == User.AccountRole.MANAGER
+    ]
+    if not (
+        workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING
+        and len(admins) == 1
+        and admins[0].id == actor_id
+        and len(managers) == 1
+        and len(invitations) == 1
+    ):
+        return None
+    candidate = managers[0]
+    invitation = invitations[0]
+    if not (
+        candidate.id != admins[0].id
+        and candidate.status == User.Status.PENDING
+        and candidate.onboarding_state is None
+        and candidate.workshop_role_id == protected.undefined_role.id
+        and not candidate.has_usable_password()
+        and invitation.user_id == candidate.id
+        and invitation.workshop_id == workshop.id
+    ):
+        return None
+    return workshop, admins[0], candidate, invitation
+
+
+def resend_permanent_manager_invitation(
+    *, actor_id, data, idempotency_key, fault_after=None
+):
+    form = PermanentManagerResendForm(data)
+    if not form.is_valid():
+        return CommandResult(
+            ResultCode.VALIDATION_ERROR, errors=form.errors.get_json_data()
+        )
+    if not idempotency_key:
+        return CommandResult(ResultCode.MANAGER_RECOVERY_UNAVAILABLE)
+    discovered = User.objects.filter(pk=actor_id).values("workshop_id").first()
+    if discovered is None or discovered["workshop_id"] is None:
+        return CommandResult(ResultCode.MANAGER_RECOVERY_UNAVAILABLE)
+    try:
+        with transaction.atomic():
+            aggregate = _lock_pending_manager_aggregate(
+                workshop_id=discovered["workshop_id"], actor_id=actor_id
+            )
+            if aggregate is None:
+                return CommandResult(ResultCode.ALREADY_ADVANCED)
+            workshop, actor, candidate, invitation = aggregate
+            if workshop.version != form.cleaned_data["expected_workshop_version"]:
+                return CommandResult(ResultCode.STALE, user=actor, workshop=workshop)
+            current_intents = list(
+                EmailDeliveryIntent.objects.select_for_update().filter(
+                    invitation=invitation,
+                    invitation_generation=invitation.invitation_generation,
+                )
+            )
+            receipts = list(
+                ManagerInvitationCommandReceipt.objects.select_for_update().filter(
+                    candidate_user=candidate
+                )
+            )
+            if not (
+                len(current_intents) == 1
+                and current_intents[0].status
+                in {
+                    EmailDeliveryIntent.Status.PENDING,
+                    EmailDeliveryIntent.Status.SENT,
+                    EmailDeliveryIntent.Status.FAILED,
+                }
+                and len(receipts) == 1
+                and receipts[0].actor_user_id == actor.id
+                and receipts[0].workshop_id == workshop.id
+                and receipts[0].result_invitation_id == invitation.id
+            ):
+                return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+
+            raw_token, token_salt, token_digest = generate_invitation_token()
+            issued_at = timezone.now()
+            prior_generation = invitation.invitation_generation
+            EmailDeliveryIntent.objects.filter(
+                invitation=invitation,
+                invitation_generation__lte=prior_generation,
+                status=EmailDeliveryIntent.Status.PENDING,
+            ).update(status=EmailDeliveryIntent.Status.SUPERSEDED)
+            if fault_after == "supersession":
+                raise RuntimeError("resend fault after supersession")
+            invitation.token_hash = token_digest
+            invitation.token_hash_version = 1
+            invitation.token_salt = token_salt
+            invitation.invitation_generation = prior_generation + 1
+            invitation.issued_at = issued_at
+            invitation.expires_at = issued_at + timedelta(hours=72)
+            invitation.save(
+                update_fields=(
+                    "token_hash",
+                    "token_hash_version",
+                    "token_salt",
+                    "invitation_generation",
+                    "issued_at",
+                    "expires_at",
+                )
+            )
+            if fault_after == "invitation":
+                raise RuntimeError("resend fault after invitation")
+            intent = EmailDeliveryIntent.objects.create(
+                invitation=invitation,
+                purpose="invitation",
+                recipient_email=candidate.email,
+                invitation_generation=invitation.invitation_generation,
+            )
+            if fault_after == "intent":
+                raise RuntimeError("resend fault after intent")
+            workshop.version += 1
+            workshop.save(update_fields=("version",))
+            if fault_after == "workshop":
+                raise RuntimeError("resend fault after Workshop")
+            transaction.on_commit(
+                lambda: schedule_invitation_delivery(
+                    intent_id=intent.id,
+                    invitation_id=invitation.id,
+                    generation=invitation.invitation_generation,
+                    raw_token=raw_token,
+                )
+            )
+            return CommandResult(
+                ResultCode.SUCCESS,
+                user=actor,
+                workshop=workshop,
+                candidate=candidate,
+                invitation=invitation,
+                delivery_intent=intent,
+            )
+    except (
+        IntegrityError,
+        ProtectedConfigurationError,
+        User.DoesNotExist,
+        UserInvitation.DoesNotExist,
+        Workshop.DoesNotExist,
+    ):
+        logger.error(
+            "Manager invitation Resend unavailable",
+            extra={
+                "operation": "identity.manager.invitation.resend",
+                "result_code": "failed",
+            },
+        )
+        return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+
+
+def _replacement_receipt_is_exact(receipt, *, workshop, actor, fingerprint):
+    candidate = receipt.candidate_user
+    invitation = receipt.result_invitation
+    return (
+        receipt.actor_user_id == actor.id
+        and receipt.workshop_id == workshop.id
+        and receipt.fingerprint_version == 1
+        and bytes(receipt.payload_fingerprint) == fingerprint
+        and candidate.workshop_id == workshop.id
+        and candidate.account_role == User.AccountRole.MANAGER
+        and candidate.status == User.Status.PENDING
+        and not candidate.has_usable_password()
+        and invitation.user_id == candidate.id
+        and invitation.workshop_id == workshop.id
+        and invitation.status == UserInvitation.Status.PENDING
+        and invitation.invitation_generation == 1
+    )
+
+
+def replace_pending_permanent_manager(
+    *, actor_id, data, idempotency_key, fault_after=None
+):
+    form = PermanentManagerReplacementForm(data)
+    if not form.is_valid():
+        return CommandResult(
+            ResultCode.VALIDATION_ERROR, errors=form.errors.get_json_data()
+        )
+    if not idempotency_key:
+        return CommandResult(ResultCode.MANAGER_RECOVERY_UNAVAILABLE)
+    values = form.cleaned_data
+    fingerprint = manager_payload_fingerprint(
+        first_name=values["first_name"],
+        last_name=values["last_name"],
+        date_of_birth=values["date_of_birth"],
+        email=values["email"],
+    )
+    receipt_key = f"replacement:{idempotency_key}"
+    discovered = User.objects.filter(pk=actor_id).values("workshop_id").first()
+    if discovered is None or discovered["workshop_id"] is None:
+        return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+    try:
+        with transaction.atomic():
+            aggregate = _lock_pending_manager_aggregate(
+                workshop_id=discovered["workshop_id"], actor_id=actor_id
+            )
+            if aggregate is None:
+                return CommandResult(ResultCode.ALREADY_ADVANCED)
+            workshop, actor, candidate, invitation = aggregate
+            current_intents = list(
+                EmailDeliveryIntent.objects.select_for_update().filter(
+                    invitation=invitation,
+                    invitation_generation=invitation.invitation_generation,
+                )
+            )
+            receipts = list(
+                ManagerInvitationCommandReceipt.objects.select_for_update()
+                .select_related("candidate_user", "result_invitation")
+                .filter(candidate_user=candidate)
+            )
+            if not (
+                len(current_intents) == 1
+                and current_intents[0].status
+                in {
+                    EmailDeliveryIntent.Status.PENDING,
+                    EmailDeliveryIntent.Status.SENT,
+                    EmailDeliveryIntent.Status.FAILED,
+                }
+                and len(receipts) == 1
+                and receipts[0].actor_user_id == actor.id
+                and receipts[0].workshop_id == workshop.id
+                and receipts[0].result_invitation_id == invitation.id
+            ):
+                return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+            receipt = (
+                receipts[0] if receipts[0].idempotency_key == receipt_key else None
+            )
+            if receipt is not None:
+                if _replacement_receipt_is_exact(
+                    receipt,
+                    workshop=workshop,
+                    actor=actor,
+                    fingerprint=fingerprint,
+                ):
+                    return CommandResult(
+                        ResultCode.REPLAY,
+                        user=actor,
+                        workshop=workshop,
+                        candidate=receipt.candidate_user,
+                        invitation=receipt.result_invitation,
+                    )
+                return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+            if workshop.version != values["expected_workshop_version"]:
+                return CommandResult(ResultCode.STALE, user=actor, workshop=workshop)
+            if candidate_has_product_history(candidate):
+                return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+            if (
+                User.objects.exclude(pk=candidate.id)
+                .filter(email__iexact=values["email"])
+                .exists()
+            ):
+                return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
+
+            candidate.delete()
+            if fault_after == "deletion":
+                raise RuntimeError("replacement fault after deletion")
+            protected = resolve_protected_configuration()
+            replacement = User(
+                email=values["email"],
+                first_name=values["first_name"],
+                last_name=values["last_name"],
+                date_of_birth=values["date_of_birth"],
+                account_role=User.AccountRole.MANAGER,
+                status=User.Status.PENDING,
+                onboarding_state=None,
+                workshop=workshop,
+                workshop_role=protected.undefined_role,
+                version=1,
+            )
+            replacement.set_unusable_password()
+            replacement.save()
+            if fault_after == "user":
+                raise RuntimeError("replacement fault after User")
+            raw_token, token_salt, token_digest = generate_invitation_token()
+            issued_at = timezone.now()
+            new_invitation = UserInvitation.objects.create(
+                user=replacement,
+                workshop=workshop,
+                token_hash=token_digest,
+                token_hash_version=1,
+                token_salt=token_salt,
+                invitation_generation=1,
+                status=UserInvitation.Status.PENDING,
+                issued_at=issued_at,
+                expires_at=issued_at + timedelta(hours=72),
+            )
+            if fault_after == "invitation":
+                raise RuntimeError("replacement fault after invitation")
+            intent = EmailDeliveryIntent.objects.create(
+                invitation=new_invitation,
+                purpose="invitation",
+                recipient_email=replacement.email,
+                invitation_generation=1,
+            )
+            if fault_after == "intent":
+                raise RuntimeError("replacement fault after intent")
+            ManagerInvitationCommandReceipt.objects.create(
+                workshop=workshop,
+                actor_user=actor,
+                candidate_user=replacement,
+                result_invitation=new_invitation,
+                idempotency_key=receipt_key,
+                fingerprint_version=1,
+                payload_fingerprint=fingerprint,
+            )
+            if fault_after == "receipt":
+                raise RuntimeError("replacement fault after receipt")
+            workshop.version += 1
+            workshop.save(update_fields=("version",))
+            if fault_after == "workshop":
+                raise RuntimeError("replacement fault after Workshop")
+            transaction.on_commit(
+                lambda: schedule_invitation_delivery(
+                    intent_id=intent.id,
+                    invitation_id=new_invitation.id,
+                    generation=1,
+                    raw_token=raw_token,
+                )
+            )
+            return CommandResult(
+                ResultCode.SUCCESS,
+                user=actor,
+                workshop=workshop,
+                candidate=replacement,
+                invitation=new_invitation,
+                delivery_intent=intent,
+            )
+    except (
+        IntegrityError,
+        ProtectedConfigurationError,
+        User.DoesNotExist,
+        UserInvitation.DoesNotExist,
+        Workshop.DoesNotExist,
+    ):
+        logger.error(
+            "Pending manager replacement unavailable",
+            extra={
+                "operation": "identity.manager.invitation.replace",
+                "result_code": "failed",
+            },
+        )
+        return CommandResult(ResultCode.INVITATION_UNAVAILABLE)
 
 
 def _invite_permanent_manager_validated(*, actor_id, form, idempotency_key):

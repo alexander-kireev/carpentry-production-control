@@ -188,3 +188,15 @@ class WorkshopTimezoneCorrectionForm(forms.Form):
         if value not in available_timezones():
             raise forms.ValidationError("Select a recognised IANA timezone.")
         return value
+
+
+class PermanentManagerResendForm(forms.Form):
+    invitation_action = forms.CharField(widget=forms.HiddenInput, initial="resend")
+    submission_nonce = forms.CharField(widget=forms.HiddenInput)
+    expected_workshop_version = forms.IntegerField(
+        min_value=1, widget=forms.HiddenInput
+    )
+
+
+class PermanentManagerReplacementForm(PermanentManagerInvitationForm):
+    invitation_action = forms.CharField(widget=forms.HiddenInput, initial="replace")
