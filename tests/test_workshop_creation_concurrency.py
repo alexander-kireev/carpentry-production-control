@@ -7,7 +7,7 @@ from django.db import close_old_connections
 
 from identity.commands import create_workshop
 from identity.models import User, WorkshopCreationCommandReceipt
-from workshops.models import OperationType, Workshop, WorkshopRole
+from workshops.models import MaterialCategory, OperationType, Workshop, WorkshopRole
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -36,6 +36,10 @@ def test_concurrent_submissions_have_one_committed_result(
             "requires_clearance": False,
             "status": "active",
         },
+    )
+    MaterialCategory.objects.get_or_create(
+        machine_key="undefined",
+        defaults={"name": "undefined", "status": "active", "version": 1},
     )
     user = User.objects.create_user(
         email="race@example.test",

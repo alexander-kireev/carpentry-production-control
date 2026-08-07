@@ -10,6 +10,7 @@ urlpatterns = [
     path("", root_destination, name="root"),
     path("health/", health, name="health"),
     path("", include("identity.urls")),
+    path("", include("workshops.urls")),
 ]
 
 urlpatterns += staticfiles_urlpatterns()

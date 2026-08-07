@@ -13,6 +13,7 @@
       <header class="shell-header">
         <div class="brand" aria-label="Carpentry Production Control">CPC</div>
         {% if identity_user %}
+          {% if identity_user.workshop.status == "operational" and identity_user.account_role != "operator" %}<nav class="role-nav" aria-label="Workshop"><a href="{% url 'workshops:libraries' %}">Libraries</a></nav>{% endif %}
           <div class="own-identity" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div>
           <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="button-secondary">Log out</button></form>
         {% endif %}
@@ -39,6 +40,33 @@
           }
         });
       });
+      document.querySelectorAll("[data-dialog-open]").forEach((opener) => {
+        opener.addEventListener("click", () => {
+          const dialog = document.getElementById(opener.dataset.dialogOpen);
+          if (dialog && typeof dialog.showModal === "function") {
+            dialog.dataset.returnFocus = opener.dataset.dialogOpen;
+            dialog.showModal();
+          }
+        });
+      });
+      document.querySelectorAll("dialog.library-dialog").forEach((dialog) => {
+        dialog.querySelectorAll("[data-dialog-close]").forEach((close) => {
+          close.addEventListener("click", () => dialog.close());
+        });
+        dialog.addEventListener("click", (event) => {
+          if (event.target === dialog) dialog.close();
+        });
+        dialog.addEventListener("close", () => {
+          const opener = document.querySelector(`[data-dialog-open="${dialog.id}"]`);
+          if (opener) opener.focus();
+        });
+      });
+      const dialogWithErrors = document.querySelector("dialog[data-dialog-auto-open]");
+      if (dialogWithErrors && typeof dialogWithErrors.showModal === "function") {
+        dialogWithErrors.showModal();
+        const invalidField = dialogWithErrors.querySelector('[aria-invalid="true"]');
+        if (invalidField) invalidField.focus();
+      }
     </script>
   </body>
 </html>

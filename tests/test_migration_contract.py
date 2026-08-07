@@ -308,15 +308,27 @@ def test_direct_inserts_receive_canonical_database_defaults():
         assert user_version == 1
 
 
-def test_only_current_slice_identity_and_event_boundary_tables_exist():
+def test_current_slice_library_and_event_subject_tables_exist():
     tables = set(connection.introspection.table_names())
     assert "user_account" in tables
     assert "auth_user" not in tables
-    assert "material_category" not in tables
+    assert {
+        "material_category",
+        "unit_type",
+        "shift_definition",
+        "workshop_role_default_clearance",
+        "configuration_command_receipt",
+        "event_subject",
+    } <= tables
     assert "user_invitation" in tables
     assert "email_delivery_intent" in tables
     assert "manager_invitation_command_receipt" in tables
-    assert {"event", "event_notification_intent", "notification"} <= tables
+    assert {
+        "event",
+        "event_subject",
+        "event_notification_intent",
+        "notification",
+    } <= tables
 
 
 def test_sb02_migration_is_additive_and_reversible_sql():

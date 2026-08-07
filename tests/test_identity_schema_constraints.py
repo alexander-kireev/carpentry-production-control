@@ -4,7 +4,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 
-from workshops.models import OperationType, Workshop, WorkshopRole
+from workshops.models import MaterialCategory, OperationType, Workshop, WorkshopRole
 
 pytestmark = pytest.mark.django_db
 
@@ -468,6 +468,10 @@ def test_workshop_creation_receipt_physical_contract_is_immutable():
             "requires_clearance": False,
             "status": "active",
         },
+    )
+    MaterialCategory.objects.get_or_create(
+        machine_key="undefined",
+        defaults={"name": "undefined", "status": "active", "version": 1},
     )
 
     user = User.objects.create_user(

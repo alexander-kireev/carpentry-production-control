@@ -4,7 +4,7 @@ from events.models import Event, EventNotificationIntent
 from identity.commands import correct_workshop_timezone
 from identity.models import User
 from identity.results import ResultCode
-from workshops.models import OperationType, Workshop, WorkshopRole
+from workshops.models import MaterialCategory, OperationType, Workshop, WorkshopRole
 
 
 def make_admin_workshop(*, status=Workshop.Status.MANAGER_REQUIRED):
@@ -25,6 +25,10 @@ def make_admin_workshop(*, status=Workshop.Status.MANAGER_REQUIRED):
             "status": "active",
             "version": 1,
         },
+    )
+    MaterialCategory.objects.get_or_create(
+        machine_key="undefined",
+        defaults={"name": "undefined", "status": "active", "version": 1},
     )
     workshop = Workshop.objects.create(
         name="Timezone QA",

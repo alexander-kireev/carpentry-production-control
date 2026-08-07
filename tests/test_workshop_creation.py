@@ -5,7 +5,7 @@ import pytest
 from identity.commands import create_workshop
 from identity.models import User, WorkshopCreationCommandReceipt
 from identity.results import ResultCode
-from workshops.models import OperationType, Workshop, WorkshopRole
+from workshops.models import MaterialCategory, OperationType, Workshop, WorkshopRole
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -39,6 +39,14 @@ def ensure_protected_configuration():
             "name": "Other",
             "is_production": True,
             "requires_clearance": False,
+            "status": "active",
+            "version": 1,
+        },
+    )
+    MaterialCategory.objects.get_or_create(
+        machine_key="undefined",
+        defaults={
+            "name": "undefined",
             "status": "active",
             "version": 1,
         },

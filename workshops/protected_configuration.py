@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from .models import OperationType, WorkshopRole
+from .models import MaterialCategory, OperationType, WorkshopRole
 
 
 class ProtectedConfigurationError(RuntimeError):
@@ -12,6 +12,7 @@ class ProtectedConfiguration:
     undefined_role: WorkshopRole
     admin_role: WorkshopRole
     other_operation_type: OperationType
+    undefined_material_category: MaterialCategory
 
 
 def resolve_protected_configuration():
@@ -20,6 +21,9 @@ def resolve_protected_configuration():
     )
     operation_types = list(
         OperationType.objects.filter(workshop__isnull=True).order_by("machine_key")
+    )
+    material_categories = list(
+        MaterialCategory.objects.filter(workshop__isnull=True).order_by("machine_key")
     )
     expected_roles = {
         ("undefined", "undefined", WorkshopRole.Status.ACTIVE, True),
@@ -49,7 +53,18 @@ def resolve_protected_configuration():
         )
         for row in operation_types
     }
-    if actual_roles != expected_roles or actual_types != expected_types:
+    expected_categories = {
+        ("undefined", "undefined", MaterialCategory.Status.ACTIVE, True)
+    }
+    actual_categories = {
+        (row.machine_key, row.name, row.status, row.version > 0)
+        for row in material_categories
+    }
+    if (
+        actual_roles != expected_roles
+        or actual_types != expected_types
+        or actual_categories != expected_categories
+    ):
         raise ProtectedConfigurationError("Protected configuration is invalid")
 
     by_key = {row.machine_key: row for row in roles}
@@ -57,6 +72,7 @@ def resolve_protected_configuration():
         undefined_role=by_key["undefined"],
         admin_role=by_key["admin"],
         other_operation_type=operation_types[0],
+        undefined_material_category=material_categories[0],
     )
 
 
@@ -65,7 +81,12 @@ def resolve_admin_role():
 
 
 def verify_workshop_protected_pair(workshop):
-    rows = list(OperationType.objects.filter(workshop=workshop).order_by("machine_key"))
+    rows = list(
+        OperationType.objects.filter(
+            workshop=workshop,
+            machine_key__in=("build_planning", "station_maintenance"),
+        ).order_by("machine_key")
+    )
     expected = {
         ("build_planning", "Build Planning", "active", False, True, True),
         ("station_maintenance", "Station Maintenance", "active", False, True, True),
