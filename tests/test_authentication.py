@@ -104,15 +104,15 @@ def test_login_and_lost_response_resume_pending_cockpit(client):
         actor_id=user.id, data=payload(), idempotency_key="lost-response"
     )
     client.force_login(user)
-    assert client.get("/onboarding/manager").headers["Location"] == "/onboarding"
+    assert client.get("/onboarding/manager").status_code == 200
     assert client.post("/logout").headers["Location"] == "/login"
     response = client.post(
         "/login",
         {"email": user.email, "password": "Valid-password-483!"},
     )
-    assert response.headers["Location"] == "/onboarding"
-    page = client.get("/onboarding")
-    assert b"Manager activation pending" in page.content
+    assert response.headers["Location"] == "/onboarding/manager"
+    page = client.get("/onboarding/manager")
+    assert b"Manager activation is pending" in page.content
 
 
 def test_activated_manager_login_resumes_operational_handoff(client):

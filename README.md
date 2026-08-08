@@ -265,13 +265,14 @@ independent secrets and must not be committed.
 Migration, race and manual QA checks use uniquely named disposable PostgreSQL
 databases. The ordinary development database must not be migrated without
 separate approval.
-An authenticated administrator resumes Workshop setup from current database state:
-`/onboarding/workshop` creates the Workshop and `/onboarding/manager` creates its
-pending permanent-manager account, generation-one invitation and delivery evidence.
+An authenticated administrator resumes from `/onboarding`, a GET-only current-stage
+resolver. `/onboarding/workshop` creates or reviews the Workshop and owns its bounded
+timezone correction; `/onboarding/manager` creates or manages the pending permanent
+manager; `/onboarding/setup` mounts the pre-operational setup workspace.
 The source transaction commits before the generation-bound delivery worker claims
 the email once and performs external I/O outside database locks. Delivery failure
-does not undo the invitation. `/onboarding` shows the administrator the safe
-current pending/sent/failed state and derived expiry. Resend retains the
+does not undo the invitation. The Manager destination shows the administrator the
+safe current pending/sent/failed state and derived expiry. Resend retains the
 candidate, rotates the credential and generation, invalidates the previous
 link, and sends only after commit. Replacement atomically swaps a pending,
 never-activated candidate only when that candidate has no product history; no

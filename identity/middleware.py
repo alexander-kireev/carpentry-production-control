@@ -1,7 +1,7 @@
 from django.contrib.auth import logout
 from django.shortcuts import redirect
 
-from .queries import resolve_authenticated_destination
+from .queries import get_onboarding_page_access, resolve_authenticated_destination
 
 
 class PreWorkshopAccessMiddleware:
@@ -27,7 +27,15 @@ class PreWorkshopAccessMiddleware:
             logout(request)
             return redirect("login")
         request.identity_destination = resolution
-        allowed = {"/", "/logout", resolution.destination.value}
+        allowed = {"/", "/logout", "/onboarding", resolution.destination.value}
+        if path in {"/onboarding/workshop", "/onboarding/manager", "/onboarding/setup"}:
+            if path == resolution.destination.value:
+                return self.get_response(request)
+            access = get_onboarding_page_access(request.user)
+            if access is not None:
+                if path != "/onboarding/setup" or access["setup_available"]:
+                    return self.get_response(request)
+            return redirect(resolution.destination.value)
         if path == "/workshop/libraries" or path.startswith("/workshop/libraries/"):
             from workshops.queries import resolve_libraries_access
 

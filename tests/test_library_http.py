@@ -1,5 +1,6 @@
 import re
 from html import unescape
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -37,8 +38,8 @@ def test_relevant_rendered_templates_are_strict_utf8_without_mojibake():
         "templates/workshops/libraries_admin.html",
         "templates/workshops/libraries_manager.html",
         "templates/workshops/_library_family.html",
-        "templates/onboarding/setup_cockpit.html",
-        "templates/onboarding/_timezone_correction.html",
+        "templates/onboarding/workshop_setup.html",
+        "templates/onboarding/workshop_details.html",
     )
     for relative_path in paths:
         content = (settings.BASE_DIR / relative_path).read_text(
@@ -161,9 +162,9 @@ def test_pending_admin_get_has_accessible_catalogue_and_no_trailing_slash():
     assert response.request["PATH_INFO"] == "/workshop/libraries"
     content = response.content.decode()
     assert (
-        "aria-live" in content
-        and "<caption>" in content
-        and "Return to setup status" in content
+        "<caption>" in content
+        and "Workshop setup areas" in content
+        and "Stations" in content
     )
     assert content.count('<section class="library-family"') == 1
     assert '<nav class="section-tabs" aria-label="Library families">' in content
@@ -338,6 +339,7 @@ def test_rejected_authorized_posts_clear_older_unfollowed_success_feedback():
         },
     )
     assert stale.status_code == 200 and b"This row changed" in stale.content
+    assert b"stale" in stale.content and b"data-dialog-auto-open" in stale.content
     _assert_no_queued_success(client)
 
     _queue_library_success(client, 3)
@@ -399,6 +401,37 @@ def test_feedback_is_session_local_one_time_and_denied_post_cannot_consume_it():
     second = owner.get("/workshop/libraries?family=unit_type").content.decode()
     assert "Change committed." in first
     assert "Change committed." not in second
+
+
+def test_library_post_result_permission_loss_uses_safe_fallback(client, monkeypatch):
+    actor, workshop = library_admin("permission-loss")
+    unit = UnitType.objects.create(workshop=workshop, name="Metres", abbreviation="m")
+    client.force_login(actor)
+    real_resolve = __import__(
+        "workshops.views", fromlist=["resolve_libraries_access"]
+    ).resolve_libraries_access
+    calls = 0
+
+    def access_then_loss(user):
+        nonlocal calls
+        calls += 1
+        return real_resolve(user) if calls == 1 else None
+
+    monkeypatch.setattr("workshops.views.resolve_libraries_access", access_then_loss)
+    monkeypatch.setattr(
+        "workshops.views.edit_library_item",
+        lambda **kwargs: SimpleNamespace(code="stale"),
+    )
+    response = client.post(
+        f"/workshop/libraries/unit_type/{unit.id}/edit?family=unit_type",
+        {
+            "version": unit.version,
+            f"edit-unit_type-{unit.id}-name": "Retained metres",
+            f"edit-unit_type-{unit.id}-abbreviation": "rm",
+        },
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/onboarding/manager"
 
 
 @pytest.mark.parametrize(
@@ -560,6 +593,11 @@ def test_edit_retire_restore_prg_and_rejected_state_navigation_are_canonical():
     assert stale.status_code == 200
     stale_content = stale.content.decode()
     assert "This row changed" in stale_content
+    assert 'value="stale"' in stale_content
+    stale_dialog = re.search(
+        rf'<dialog[^>]*id="edit-unit_type-{unit.id}"[^>]*>', stale_content
+    ).group(0)
+    assert "data-dialog-auto-open" in stale_dialog
     _assert_canonical_library_navigation(client, stale_content)
 
     role = WorkshopRole.objects.create(workshop=workshop, name="Assigned role")

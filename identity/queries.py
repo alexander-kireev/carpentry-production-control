@@ -83,7 +83,7 @@ def resolve_authenticated_destination(user):
         return DestinationResult(Destination.LOGIN, False, user=user)
     if workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING:
         if exact_admin:
-            return DestinationResult(Destination.SETUP_COCKPIT, True, user=user)
+            return DestinationResult(Destination.MANAGER_PENDING, True, user=user)
         if user.account_role == User.AccountRole.OPERATOR:
             return DestinationResult(Destination.HOLDING, True, user=user)
         return DestinationResult(Destination.LOGIN, False, user=user)
@@ -95,6 +95,39 @@ def resolve_authenticated_destination(user):
             user=user,
         )
     return DestinationResult(Destination.LOGIN, False, user=user)
+
+
+def get_onboarding_page_access(user):
+    """Return revisitable onboarding stages for an exact permanent admin."""
+    try:
+        actor = User.objects.select_related("workshop", "workshop_role").get(pk=user.pk)
+    except User.DoesNotExist:
+        return None
+    workshop = actor.workshop
+    role = actor.workshop_role
+    exact_admin = (
+        actor.status == User.Status.ACTIVE
+        and actor.account_role == User.AccountRole.ADMIN
+        and actor.onboarding_state is None
+        and workshop is not None
+        and role is not None
+        and role.workshop_id is None
+        and role.machine_key == "admin"
+        and role.name == "Admin"
+        and role.status == WorkshopRole.Status.ACTIVE
+    )
+    if not exact_admin or workshop.status not in {
+        Workshop.Status.MANAGER_REQUIRED,
+        Workshop.Status.MANAGER_ACTIVATION_PENDING,
+    }:
+        return None
+    setup_available = workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING
+    return {
+        "actor": actor,
+        "workshop": workshop,
+        "manager_available": True,
+        "setup_available": setup_available,
+    }
 
 
 def get_pending_manager_setup(user):

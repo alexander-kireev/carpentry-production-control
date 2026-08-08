@@ -26,7 +26,7 @@ class Destination(StrEnum):
     LOGIN = "/login"
     CREATE_WORKSHOP = "/onboarding/workshop"
     INVITE_MANAGER = "/onboarding/manager"
-    SETUP_COCKPIT = "/onboarding"
+    MANAGER_PENDING = "/onboarding/manager"
     HOLDING = "/onboarding/holding"
     DASHBOARD = "/dashboard"
 

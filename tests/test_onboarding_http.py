@@ -12,6 +12,7 @@ from identity.models import (
     UserInvitation,
     WorkshopCreationCommandReceipt,
 )
+from identity.results import CommandResult, ResultCode
 from workshops.models import MaterialCategory, OperationType, WorkshopRole
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -55,7 +56,7 @@ def test_create_workshop_page_and_post_success(client):
     page = client.get("/onboarding/workshop")
     assert page.status_code == 200
     assert (
-        b"Create your workshop" in page.content and b"data-submit-once" in page.content
+        b"Create your Workshop" in page.content and b"data-submit-once" in page.content
     )
     form = page.context["form"]
     response = client.post(
@@ -75,9 +76,7 @@ def test_create_workshop_page_and_post_success(client):
     assert b'id="id_first_name"' in handoff.content
     assert b"generation" not in handoff.content.lower()
     assert WorkshopCreationCommandReceipt.objects.count() == 1
-    assert (
-        client.get("/onboarding/workshop").headers["Location"] == "/onboarding/manager"
-    )
+    assert client.get("/onboarding/workshop").status_code == 200
 
 
 def test_csrf_and_trailing_slashes_are_rejected(client):
@@ -130,7 +129,7 @@ def test_manager_form_invalid_post_and_committed_pending_cockpit(client):
     assert response.headers["Location"] == "/onboarding/manager"
     page = client.get("/onboarding/manager")
     assert page.status_code == 200
-    assert b"Invite your permanent manager" in page.content
+    assert b"Invite the permanent manager" in page.content
     assert b"data-submit-once" in page.content and b"Send invitation" in page.content
     form = page.context["form"]
     invalid = client.post(
@@ -159,12 +158,12 @@ def test_manager_form_invalid_post_and_committed_pending_cockpit(client):
             "email": "manager-http@example.test",
         },
     )
-    assert posted.headers["Location"] == "/onboarding"
-    pending = client.get("/onboarding")
+    assert posted.headers["Location"] == "/onboarding/manager"
+    pending = client.get("/onboarding/manager")
     html = pending.content.lower()
-    assert b"manager activation pending" in html
+    assert b"manager activation is pending" in html
     assert b"morgan manager" in html and b"manager-http@example.test" in html
-    assert b"provider accepted" in html and b"not yet confirmed" in html
+    assert b"delivery" in html and b"awaiting activation" in html
     for forbidden in (
         b"/invitations/",
         b"token_hash",
@@ -176,7 +175,7 @@ def test_manager_form_invalid_post_and_committed_pending_cockpit(client):
     assert UserInvitation.objects.count() == 1
     assert EmailDeliveryIntent.objects.count() == 1
     assert ManagerInvitationCommandReceipt.objects.count() == 1
-    assert client.get("/onboarding/manager").headers["Location"] == "/onboarding"
+    assert client.get("/onboarding/manager").status_code == 200
 
 
 def test_manager_post_requires_csrf(client):
@@ -190,10 +189,10 @@ def test_manager_post_requires_csrf(client):
 def test_timezone_control_corrects_once_without_hiding_manager_flow(client):
     user = admin()
     _create_workshop(client, user)
-    page = client.get("/onboarding/manager")
+    page = client.get("/onboarding/workshop")
     timezone_form = page.context["timezone_form"]
     response = client.post(
-        "/onboarding/manager",
+        "/onboarding/workshop",
         {
             "timezone_action": "correct",
             "submission_nonce": timezone_form.initial["submission_nonce"],
@@ -203,11 +202,37 @@ def test_timezone_control_corrects_once_without_hiding_manager_flow(client):
             "timezone": "Europe/Paris",
         },
     )
-    assert response.headers["Location"] == "/onboarding/manager"
-    refreshed = client.get("/onboarding/manager")
+    assert response.headers["Location"] == "/onboarding/workshop"
+    refreshed = client.get("/onboarding/workshop")
     assert b"Europe/Paris" in refreshed.content
-    assert b"one-time timezone correction is closed" in refreshed.content.lower()
-    assert b"Invite your permanent manager" in refreshed.content
+    assert client.get("/onboarding/manager").status_code == 200
+
+
+def test_timezone_stale_result_reopens_dialog_and_retains_safe_value(
+    client, monkeypatch
+):
+    user = admin()
+    _create_workshop(client, user)
+    page = client.get("/onboarding/workshop")
+    form = page.context["timezone_form"]
+    monkeypatch.setattr(
+        "identity.views.correct_workshop_timezone",
+        lambda **kwargs: CommandResult(ResultCode.STALE, user=user),
+    )
+    response = client.post(
+        "/onboarding/workshop",
+        {
+            "timezone_action": "correct",
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+            "timezone": "Europe/Paris",
+        },
+    )
+    content = response.content.decode("utf-8")
+    assert response.status_code == 400
+    assert 'id="timezone-dialog"' in content and "data-dialog-auto-open" in content
+    assert "Workshop setup changed" in content
+    assert response.context["timezone_form"].data["timezone"] == "Europe/Paris"
 
 
 def test_pending_cockpit_exposes_no_acceptance_credential_route(client):
@@ -226,7 +251,7 @@ def test_pending_cockpit_exposes_no_acceptance_credential_route(client):
             "email": "manager-private@example.test",
         },
     )
-    assert b"/invitations/" not in client.get("/onboarding").content
+    assert b"/invitations/" not in client.get("/onboarding/manager").content
 
 
 def _reach_pending_cockpit(client):
@@ -245,47 +270,80 @@ def _reach_pending_cockpit(client):
             "email": "manager-recovery@example.test",
         },
     )
-    assert response.headers["Location"] == "/onboarding"
+    assert response.headers["Location"] == "/onboarding/manager"
     return user
 
 
 def test_cockpit_recovery_controls_resend_and_do_not_duplicate_on_refresh(client):
     _reach_pending_cockpit(client)
-    page = client.get("/onboarding")
+    page = client.get("/onboarding/manager")
     html = page.content.lower()
     assert b"send a fresh invitation" in html
     assert b"replace pending manager" in html
-    assert b"confirm resend" in html and b"confirm replacement" in html
+    assert b"confirm resend" in html and b"replace and invite" in html
     rendered = page.content.decode()
-    assert '<section class="onboarding-card timezone-correction"' in rendered
-    assert "Saving timezone…" in rendered
-    assert "Committing…" in rendered
+    assert '<dialog class="library-dialog library-confirm-dialog"' in rendered
     assert not any(token in rendered for token in ("Ã", "Â", "â€"))
     resend = page.context["resend_form"]
     response = client.post(
-        "/onboarding",
+        "/onboarding/manager",
         {
             "invitation_action": "resend",
             "submission_nonce": resend.initial["submission_nonce"],
             "expected_workshop_version": resend.initial["expected_workshop_version"],
         },
     )
-    assert response.headers["Location"] == "/onboarding"
-    refreshed = client.get("/onboarding")
-    assert b"previous link is now unavailable" in refreshed.content.lower()
+    assert response.headers["Location"] == "/onboarding/manager"
+    refreshed = client.get("/onboarding/manager")
+    assert b"fresh invitation was committed" in refreshed.content.lower()
     assert UserInvitation.objects.get().invitation_generation == 2
     assert EmailDeliveryIntent.objects.count() == 2
-    client.get("/onboarding")
+    client.get("/onboarding/manager")
     assert UserInvitation.objects.get().invitation_generation == 2
+
+
+def test_manager_stale_result_is_inside_reopened_affected_dialog(client, monkeypatch):
+    _reach_pending_cockpit(client)
+    page = client.get("/onboarding/manager")
+    form = page.context["resend_form"]
+    monkeypatch.setattr(
+        "identity.views.resend_permanent_manager_invitation",
+        lambda **kwargs: CommandResult(ResultCode.STALE),
+    )
+    response = client.post(
+        "/onboarding/manager",
+        {
+            "invitation_action": "resend",
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+        },
+    )
+    content = response.content.decode("utf-8")
+    dialog = content.split('id="resend-dialog"', 1)[1].split("</dialog>", 1)[0]
+    assert response.status_code == 400 and "data-dialog-auto-open" in dialog
+    assert "Workshop setup changed" in dialog
+
+
+def test_malformed_resend_announces_validation_inside_reopened_dialog(client):
+    _reach_pending_cockpit(client)
+    response = client.post(
+        "/onboarding/manager",
+        {"invitation_action": "resend"},
+    )
+    content = response.content.decode("utf-8")
+    dialog = content.split('id="resend-dialog"', 1)[1].split("</dialog>", 1)[0]
+    assert response.status_code == 400 and "data-dialog-auto-open" in dialog
+    assert 'role="alert"' in dialog
+    assert "The resend request was invalid" in dialog
 
 
 def test_cockpit_replacement_validation_and_success(client):
     _reach_pending_cockpit(client)
     old_candidate = User.objects.get(account_role="manager")
-    page = client.get("/onboarding")
+    page = client.get("/onboarding/manager")
     form = page.context["replacement_form"]
     invalid = client.post(
-        "/onboarding",
+        "/onboarding/manager",
         {
             "invitation_action": "replace",
             "submission_nonce": form.initial["submission_nonce"],
@@ -298,10 +356,10 @@ def test_cockpit_replacement_validation_and_success(client):
     )
     assert invalid.status_code == 400 and b"Kept" in invalid.content
     assert User.objects.filter(pk=old_candidate.id).exists()
-    page = client.get("/onboarding")
+    page = client.get("/onboarding/manager")
     form = page.context["replacement_form"]
     replaced = client.post(
-        "/onboarding",
+        "/onboarding/manager",
         {
             "invitation_action": "replace",
             "submission_nonce": form.initial["submission_nonce"],
@@ -312,8 +370,8 @@ def test_cockpit_replacement_validation_and_success(client):
             "email": "riley-http@example.test",
         },
     )
-    assert replaced.headers["Location"] == "/onboarding"
-    refreshed = client.get("/onboarding")
+    assert replaced.headers["Location"] == "/onboarding/manager"
+    refreshed = client.get("/onboarding/manager")
     assert b"riley replacement" in refreshed.content.lower()
     assert b"pending manager was replaced" in refreshed.content.lower()
     assert not User.objects.filter(pk=old_candidate.id).exists()
@@ -323,13 +381,15 @@ def test_cockpit_unknown_action_and_csrf_are_safe(client):
     user = _reach_pending_cockpit(client)
     before = (User.objects.count(), UserInvitation.objects.count())
     assert (
-        client.post("/onboarding", {"invitation_action": "unknown"}).status_code == 302
+        client.post("/onboarding/manager", {"invitation_action": "unknown"}).status_code
+        == 302
     )
     assert (User.objects.count(), UserInvitation.objects.count()) == before
     secure = Client(enforce_csrf_checks=True)
     secure.force_login(user)
     assert (
-        secure.post("/onboarding", {"invitation_action": "resend"}).status_code == 403
+        secure.post("/onboarding/manager", {"invitation_action": "resend"}).status_code
+        == 403
     )
 
 
@@ -345,7 +405,7 @@ def test_cockpit_hides_replacement_when_candidate_has_history(client):
         primary_subject_type="user",
         primary_subject_id=candidate.id,
     )
-    response = client.get("/onboarding")
+    response = client.get("/onboarding/manager")
     assert response.status_code == 200
     assert b"replace pending manager" not in response.content.lower()
     assert b"confirm replacement" not in response.content.lower()
@@ -360,6 +420,64 @@ def test_cockpit_fails_closed_for_superseded_current_delivery(client, monkeypatc
     _reach_pending_cockpit(client)
     intent = EmailDeliveryIntent.objects.get()
     EmailDeliveryIntent.objects.filter(pk=intent.pk).update(status="superseded")
-    response = client.get("/onboarding")
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/login"
+    response = client.get("/onboarding/manager", follow=True)
+    assert response.status_code == 200
+    assert response.redirect_chain == [("/login", 302)]
+    assert "_auth_user_id" not in client.session
+
+
+def test_pending_post_aggregate_loss_ends_session_without_redirect_loop(
+    client, monkeypatch
+):
+    user = _reach_pending_cockpit(client)
+    page = client.get("/onboarding/manager")
+    form = page.context["resend_form"]
+
+    def lose_aggregate(**kwargs):
+        EmailDeliveryIntent.objects.all().delete()
+        return CommandResult(ResultCode.ALREADY_ADVANCED, user=user)
+
+    monkeypatch.setattr(
+        "identity.views.resend_permanent_manager_invitation", lose_aggregate
+    )
+    response = client.post(
+        "/onboarding/manager",
+        {
+            "invitation_action": "resend",
+            "submission_nonce": form.initial["submission_nonce"],
+            "expected_workshop_version": form.initial["expected_workshop_version"],
+        },
+        follow=True,
+    )
+    assert response.status_code == 200
+    assert response.redirect_chain == [("/login", 302)]
+    assert "_auth_user_id" not in client.session
+
+
+def test_saved_workshop_and_manager_render_exact_safe_status_truth(client, monkeypatch):
+    _reach_pending_cockpit(client)
+    workshop = client.get("/onboarding/workshop").content.decode("utf-8")
+    assert "Workshop status" in workshop
+    assert "manager activation pending" in workshop.lower()
+    assert "Identity editing" in workshop and "Unavailable until" in workshop
+
+    real_projection = __import__(
+        "identity.views", fromlist=["get_pending_manager_setup"]
+    ).get_pending_manager_setup
+
+    def sent_expired_projection(user):
+        projection = real_projection(user)
+        projection["delivery_status"] = "sent"
+        projection["expired"] = True
+        return projection
+
+    monkeypatch.setattr(
+        "identity.views.get_pending_manager_setup", sent_expired_projection
+    )
+    manager = client.get("/onboarding/manager").content.decode("utf-8")
+    assert "Provider accepted; inbox delivery is not confirmed" in manager
+    assert "Expired" in manager
+    assert all(
+        secret not in manager.lower()
+        for secret in ("token_hash", "generation", "receipt")
+    )

@@ -6,8 +6,9 @@ from .views import (
     invitation_acceptance,
     login_view,
     logout_view,
-    onboarding_cockpit,
     onboarding_manager,
+    onboarding_resolver,
+    onboarding_setup,
     register,
     workshop_onboarding,
 )
@@ -23,7 +24,8 @@ urlpatterns = [
     path("logout", logout_view, name="logout"),
     path("onboarding/workshop", workshop_onboarding, name="onboarding-workshop"),
     path("onboarding/manager", onboarding_manager, name="onboarding-manager"),
-    path("onboarding", onboarding_cockpit, name="onboarding-cockpit"),
+    path("onboarding", onboarding_resolver, name="onboarding-resolver"),
+    path("onboarding/setup", onboarding_setup, name="onboarding-setup"),
     path("onboarding/holding", holding, name="onboarding-holding"),
     path("dashboard", dashboard, name="dashboard"),
 ]
