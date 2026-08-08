@@ -158,3 +158,26 @@ class MaterialVariantForm(forms.Form):
 class MaterialTransitionForm(forms.Form):
     submission_key = forms.UUIDField(widget=forms.HiddenInput)
     version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)
+
+
+class StationForm(forms.Form):
+    submission_key = forms.UUIDField(widget=forms.HiddenInput)
+    name = forms.CharField(max_length=200, label="Station name")
+    capability_ids = forms.TypedMultipleChoiceField(
+        required=False,
+        coerce=int,
+        choices=(),
+        label="Supported Operation Types",
+        help_text="Select zero or more capabilities. Other is included only when checked.",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "library-checkbox-list"}),
+    )
+
+    def __init__(self, *args, capability_choices=(), edit=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["capability_ids"].choices = capability_choices
+        if edit:
+            self.fields.pop("submission_key")
+
+
+class StationRetireForm(forms.Form):
+    version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)

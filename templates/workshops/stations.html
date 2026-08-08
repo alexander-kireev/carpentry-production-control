@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Stations | {{ workshop_name }}{% endblock %}
+{% block content %}
+{% if pending_setup %}{% include "onboarding/_stage_nav.html" with stage="setup" setup_available=True %}{% include "onboarding/_setup_tabs.html" with active="stations" %}{% else %}{% include "workshops/_workshop_nav.html" %}{% endif %}
+{% include "workshops/_station_catalogue.html" %}
+{% endblock %}

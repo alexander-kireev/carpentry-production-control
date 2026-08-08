@@ -11,6 +11,7 @@ from django.utils import timezone
 from events.producer import EventSpec, EventSubjectSpec, produce_events
 from identity.models import User
 
+from . import station_dependencies
 from .models import (
     ConfigurationCommandReceipt,
     Material,
@@ -19,6 +20,8 @@ from .models import (
     MaterialVariant,
     OperationType,
     ShiftDefinition,
+    Station,
+    StationSupportedOperationType,
     StockEffect,
     UnitType,
     Workshop,
@@ -430,6 +433,17 @@ def transition_library_item(
             actor, workshop = _locked_admin(actor_id, workshop_id)
             if actor is None:
                 return LibraryCommandResult("unavailable")
+            supporting_station_ids = []
+            if family == "operation_type" and action == "retire":
+                supporting_station_ids = list(
+                    Station.objects.select_for_update()
+                    .filter(
+                        lifecycle_status=Station.LifecycleStatus.ACTIVE,
+                        supported_operation_links__operation_type_id=item_id,
+                    )
+                    .order_by("id")
+                    .values_list("id", flat=True)
+                )
             source = (
                 FAMILY_MODELS[family]
                 .objects.select_for_update()
@@ -453,6 +467,17 @@ def transition_library_item(
                 ).exists()
             ):
                 return LibraryCommandResult("unavailable")
+            if family == "operation_type" and action == "retire":
+                # The post-target recheck closes a concurrent capability create
+                # whose initial Station scan was empty.
+                if (
+                    supporting_station_ids
+                    or Station.objects.filter(
+                        lifecycle_status=Station.LifecycleStatus.ACTIVE,
+                        supported_operation_links__operation_type_id=source.id,
+                    ).exists()
+                ):
+                    return LibraryCommandResult("unavailable")
             if (
                 family == "operation_type"
                 and action == "retire"
@@ -484,6 +509,418 @@ def transition_library_item(
             return LibraryCommandResult("success", family, source.id, source.version)
     except IntegrityError, TypeError, ValueError:
         return LibraryCommandResult("validation_error")
+
+
+@dataclass(frozen=True)
+class StationCommandResult:
+    code: str
+    station_id: int | None = None
+    station_code: str | None = None
+    version: int | None = None
+    errors: dict[str, list[str]] = field(default_factory=dict)
+
+
+def _station_name(value):
+    if not isinstance(value, str):
+        raise ValueError("Name is invalid")
+    value = unicodedata.normalize("NFC", value.strip())
+    if not value:
+        raise ValueError("Name is required")
+    return value
+
+
+def _station_capability_ids(value):
+    if isinstance(value, (str, bytes)):
+        raise ValueError("Capabilities are invalid")
+    try:
+        items = tuple(value)
+    except TypeError as error:
+        raise ValueError("Capabilities are invalid") from error
+    if any(isinstance(item, bool) or not isinstance(item, int) for item in items):
+        raise ValueError("Capabilities are invalid")
+    try:
+        return tuple(sorted(set(items)))
+    except TypeError as error:
+        raise ValueError("Capabilities are invalid") from error
+
+
+def _station_fingerprint(name, capability_ids):
+    payload = {"name": name, "capability_ids": list(capability_ids)}
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _locked_station_operation_types(workshop, capability_ids):
+    rows = list(
+        OperationType.objects.select_for_update()
+        .filter(pk__in=capability_ids)
+        .order_by("id")
+    )
+    if len(rows) != len(capability_ids):
+        raise ValueError("Capabilities are invalid")
+    for row in rows:
+        local = (
+            row.workshop_id == workshop.id
+            and row.status == OperationType.Status.ACTIVE
+            and row.is_production
+        )
+        other = (
+            row.workshop_id is None
+            and row.machine_key == "other"
+            and row.name == "Other"
+            and row.status == OperationType.Status.ACTIVE
+            and row.is_production
+        )
+        if not (local or other):
+            raise ValueError("Capabilities are invalid")
+    return rows
+
+
+def _station_subjects(workshop_id, changed_operation_type_ids=()):
+    return (
+        EventSubjectSpec("workshop", workshop_id, "workshop"),
+        *(
+            EventSubjectSpec("operation_type", operation_type_id, "changed_capability")
+            for operation_type_id in sorted(changed_operation_type_ids)
+        ),
+    )
+
+
+def _station_event(event_type, actor, station, payload, *, changed_ids=()):
+    return produce_events(
+        [
+            EventSpec(
+                event_type=event_type,
+                occurred_at=timezone.now(),
+                actor_type="user",
+                actor_user_id=actor.id,
+                primary_subject_type="station",
+                primary_subject_id=station.id,
+                payload=payload,
+                idempotency_key=(
+                    f"station:{station.id}:{event_type.lower()}:{station.version}"
+                ),
+                subjects=_station_subjects(station.workshop_id, changed_ids),
+            )
+        ]
+    )[0]
+
+
+def _capability_loss_event(actor, station, operation_type):
+    return produce_events(
+        [
+            EventSpec(
+                event_type="OPERATION_TYPE_CAPABILITY_LOST",
+                occurred_at=timezone.now(),
+                actor_type="user",
+                actor_user_id=actor.id,
+                primary_subject_type="operation_type",
+                primary_subject_id=operation_type.id,
+                payload={
+                    "cause": "no_station_support",
+                    "operation_type_name": operation_type.name,
+                    "source_station_code": station.code,
+                },
+                idempotency_key=(
+                    f"operation-type:{operation_type.id}:capability-lost:"
+                    f"station:{station.id}:v{station.version}"
+                ),
+                subjects=(
+                    EventSubjectSpec("workshop", station.workshop_id, "workshop"),
+                    EventSubjectSpec("station", station.id, "source_station"),
+                ),
+            )
+        ]
+    )[0]
+
+
+def _emit_final_support_losses(actor, station, removed_operation_types):
+    for operation_type in removed_operation_types:
+        if operation_type.workshop_id is None:
+            continue
+        has_support = StationSupportedOperationType.objects.filter(
+            operation_type=operation_type,
+            station__lifecycle_status=Station.LifecycleStatus.ACTIVE,
+        ).exists()
+        if not has_support:
+            _capability_loss_event(actor, station, operation_type)
+
+
+def create_station(*, actor_id, workshop_id, submission_key, data):
+    if not submission_key or not isinstance(data, dict):
+        return StationCommandResult("unavailable")
+    try:
+        name = _station_name(data.get("name"))
+        capability_ids = _station_capability_ids(data.get("capability_ids", ()))
+        fingerprint = _station_fingerprint(name, capability_ids)
+        with transaction.atomic():
+            actor, workshop = _locked_admin(actor_id, workshop_id)
+            if actor is None:
+                return StationCommandResult("unavailable")
+            receipt = ConfigurationCommandReceipt.objects.filter(
+                workshop=workshop,
+                command_type="station_create",
+                submission_key=submission_key,
+            ).first()
+            if receipt is not None:
+                source = Station.objects.filter(
+                    pk=receipt.result_id, workshop=workshop
+                ).first()
+                summary = receipt.result_summary or {}
+                if (
+                    receipt.actor_user_id == actor.id
+                    and receipt.fingerprint_version == 1
+                    and receipt.payload_fingerprint == fingerprint
+                    and receipt.result_type == "station"
+                    and source is not None
+                    and summary
+                    == {"station_id": source.id, "code": source.code, "version": 1}
+                ):
+                    return StationCommandResult(
+                        "recovered", source.id, source.code, summary["version"]
+                    )
+                return StationCommandResult("unavailable")
+            selected = _locked_station_operation_types(workshop, capability_ids)
+            workshop.station_code_counter += 1
+            workshop.save(update_fields=["station_code_counter"])
+            code = f"ST-{workshop.station_code_counter:03d}"
+            station = Station.objects.create(
+                workshop=workshop,
+                code=code,
+                name=name,
+                lifecycle_status=Station.LifecycleStatus.ACTIVE,
+                availability_status=Station.AvailabilityStatus.AVAILABLE,
+            )
+            StationSupportedOperationType.objects.bulk_create(
+                [
+                    StationSupportedOperationType(
+                        station=station, operation_type=operation_type
+                    )
+                    for operation_type in selected
+                ]
+            )
+            now = timezone.now()
+            for operation_type in selected:
+                if (
+                    operation_type.workshop_id == workshop.id
+                    and operation_type.first_referenced_at is None
+                ):
+                    OperationType.objects.filter(
+                        pk=operation_type.id, first_referenced_at__isnull=True
+                    ).update(first_referenced_at=now)
+            _station_event(
+                "STATION_CREATED",
+                actor,
+                station,
+                {
+                    "code": station.code,
+                    "name": station.name,
+                    "origin": "custom",
+                    "initial_availability": station.availability_status,
+                    "capability_ids": list(capability_ids),
+                    "version": station.version,
+                },
+            )
+            ConfigurationCommandReceipt.objects.create(
+                workshop=workshop,
+                actor_user=actor,
+                command_type="station_create",
+                submission_key=submission_key,
+                fingerprint_version=1,
+                payload_fingerprint=fingerprint,
+                result_type="station",
+                result_id=station.id,
+                result_summary={
+                    "station_id": station.id,
+                    "code": station.code,
+                    "version": 1,
+                },
+            )
+            return StationCommandResult(
+                "committed", station.id, station.code, station.version
+            )
+    except IntegrityError, TypeError, ValueError:
+        return StationCommandResult("invalid")
+
+
+def edit_station(*, actor_id, workshop_id, station_code, expected_version, data):
+    if not isinstance(data, dict):
+        return StationCommandResult("unavailable")
+    try:
+        name = _station_name(data.get("name"))
+        capability_ids = _station_capability_ids(data.get("capability_ids", ()))
+        version = _positive_integer(expected_version)
+        with transaction.atomic():
+            actor, workshop = _locked_admin(actor_id, workshop_id)
+            if actor is None:
+                return StationCommandResult("unavailable")
+            source_id = (
+                Station.objects.filter(workshop=workshop, code=station_code)
+                .values_list("id", flat=True)
+                .first()
+            )
+            if source_id is None:
+                return StationCommandResult("unavailable")
+            current_before_lock = set(
+                StationSupportedOperationType.objects.filter(
+                    station_id=source_id
+                ).values_list("operation_type_id", flat=True)
+            )
+            proposed_removals = tuple(sorted(current_before_lock - set(capability_ids)))
+            # Future Operation ownership replaces this explicit zero-source seam.
+            if (
+                proposed_removals
+                and station_dependencies.locked_operations_blocking_capability_removal(
+                    station_id=source_id, operation_type_ids=proposed_removals
+                )
+            ):
+                return StationCommandResult("blocked")
+            station = Station.objects.select_for_update().filter(pk=source_id).first()
+            if (
+                station is None
+                or station.lifecycle_status != Station.LifecycleStatus.ACTIVE
+            ):
+                return StationCommandResult("unavailable")
+            if station.version != version:
+                return StationCommandResult(
+                    "stale", station.id, station.code, station.version
+                )
+            current_ids = set(
+                station.supported_operation_links.values_list(
+                    "operation_type_id", flat=True
+                )
+            )
+            affected_ids = tuple(sorted(current_ids | set(capability_ids)))
+            affected = _locked_station_operation_types(workshop, affected_ids)
+            affected_by_id = {row.id: row for row in affected}
+            added = sorted(set(capability_ids) - current_ids)
+            removed = sorted(current_ids - set(capability_ids))
+            changed_fields = []
+            if station.name != name:
+                station.name = name
+                changed_fields.append("name")
+            if added or removed:
+                changed_fields.append("supported_operation_types")
+            if not changed_fields:
+                return StationCommandResult(
+                    "committed", station.id, station.code, station.version
+                )
+            if (
+                removed
+                and station_dependencies.locked_operations_blocking_capability_removal(
+                    station_id=station.id, operation_type_ids=tuple(removed)
+                )
+            ):
+                return StationCommandResult("blocked")
+            StationSupportedOperationType.objects.filter(
+                station=station, operation_type_id__in=removed
+            ).delete()
+            StationSupportedOperationType.objects.bulk_create(
+                [
+                    StationSupportedOperationType(
+                        station=station, operation_type_id=operation_type_id
+                    )
+                    for operation_type_id in added
+                ]
+            )
+            now = timezone.now()
+            for operation_type_id in added:
+                operation_type = affected_by_id[operation_type_id]
+                if (
+                    operation_type.workshop_id == workshop.id
+                    and operation_type.first_referenced_at is None
+                ):
+                    OperationType.objects.filter(
+                        pk=operation_type.id, first_referenced_at__isnull=True
+                    ).update(first_referenced_at=now)
+            station.version += 1
+            station.save(update_fields=["name", "version"])
+            _station_event(
+                "STATION_UPDATED",
+                actor,
+                station,
+                {
+                    "code": station.code,
+                    "name": station.name,
+                    "origin": "custom",
+                    "changed_fields": changed_fields,
+                    "added_capability_ids": added,
+                    "removed_capability_ids": removed,
+                    "capability_ids": list(capability_ids),
+                    "version": station.version,
+                },
+                changed_ids=tuple(added + removed),
+            )
+            _emit_final_support_losses(
+                actor, station, [affected_by_id[item] for item in removed]
+            )
+            return StationCommandResult(
+                "committed", station.id, station.code, station.version
+            )
+    except IntegrityError, TypeError, ValueError:
+        return StationCommandResult("invalid")
+
+
+def retire_station(*, actor_id, workshop_id, station_code, expected_version):
+    try:
+        version = _positive_integer(expected_version)
+        with transaction.atomic():
+            actor, workshop = _locked_admin(actor_id, workshop_id)
+            if actor is None:
+                return StationCommandResult("unavailable")
+            station = (
+                Station.objects.select_for_update()
+                .filter(workshop=workshop, code=station_code)
+                .first()
+            )
+            if (
+                station is None
+                or station.lifecycle_status != Station.LifecycleStatus.ACTIVE
+            ):
+                return StationCommandResult("unavailable")
+            if station.version != version:
+                return StationCommandResult(
+                    "stale", station.id, station.code, station.version
+                )
+            if station_dependencies.locked_maintenance_jobs_blocking_retirement(
+                station_id=station.id
+            ) or station_dependencies.locked_operations_blocking_retirement(
+                station_id=station.id
+            ):
+                return StationCommandResult("blocked")
+            capability_ids = tuple(
+                station.supported_operation_links.order_by(
+                    "operation_type_id"
+                ).values_list("operation_type_id", flat=True)
+            )
+            affected = _locked_station_operation_types(workshop, capability_ids)
+            prior_availability = station.availability_status
+            station.lifecycle_status = Station.LifecycleStatus.RETIRED
+            station.availability_status = Station.AvailabilityStatus.OFFLINE
+            station.version += 1
+            station.save(
+                update_fields=["lifecycle_status", "availability_status", "version"]
+            )
+            _station_event(
+                "STATION_RETIRED",
+                actor,
+                station,
+                {
+                    "code": station.code,
+                    "name": station.name,
+                    "origin": "custom",
+                    "prior_availability": prior_availability,
+                    "version": station.version,
+                },
+            )
+            _emit_final_support_losses(actor, station, affected)
+            return StationCommandResult(
+                "committed", station.id, station.code, station.version
+            )
+    except IntegrityError, TypeError, ValueError:
+        return StationCommandResult("invalid")
 
 
 @dataclass(frozen=True)

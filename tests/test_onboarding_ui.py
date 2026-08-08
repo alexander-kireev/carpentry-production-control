@@ -37,7 +37,8 @@ def test_pending_admin_can_revisit_all_three_stage_destinations():
         assert b"Workshop setup" in response.content
     setup = client.get("/onboarding/setup").content
     assert b"Stations" in setup
-    assert b"unavailable until SC-03" in setup
+    assert b'href="/workshop/stations"' in setup
+    assert b"unavailable until SC-03" not in setup
     assert b"Add from presets" in setup
     assert b"disabled" in setup
     manager = client.get("/onboarding/manager").content.decode("utf-8")

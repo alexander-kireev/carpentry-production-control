@@ -5,6 +5,23 @@ from . import views
 app_name = "workshops"
 
 urlpatterns = [
+    path("workshop/stations", views.stations, name="stations"),
+    path("workshop/stations/create", views.station_create, name="station-create"),
+    path(
+        "workshop/stations/<str:station_code>",
+        views.station_detail,
+        name="station-detail",
+    ),
+    path(
+        "workshop/stations/<str:station_code>/edit",
+        views.station_edit,
+        name="station-edit",
+    ),
+    path(
+        "workshop/stations/<str:station_code>/retire",
+        views.station_retire,
+        name="station-retire",
+    ),
     path("workshop/materials", views.materials, name="materials"),
     path("workshop/materials/create", views.material_create, name="material-create"),
     path(

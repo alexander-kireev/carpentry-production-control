@@ -15,12 +15,45 @@ from workshops.models import (
     MaterialCategory,
     OperationType,
     ShiftDefinition,
+    Station,
+    StationSupportedOperationType,
     UnitType,
     Workshop,
     WorkshopRole,
     WorkshopRoleDefaultClearance,
 )
 from workshops.protected_configuration import resolve_protected_configuration
+
+
+def test_active_station_support_blocks_operation_type_retirement_without_writes():
+    actor, workshop = library_admin("station-retirement-blocker")
+    operation_type = OperationType.objects.create(
+        workshop=workshop,
+        name="Cutting",
+        description="",
+        is_production=True,
+        requires_clearance=True,
+    )
+    station = Station.objects.create(
+        workshop=workshop, code="ST-001", name="Cutting Cell"
+    )
+    StationSupportedOperationType.objects.create(
+        station=station, operation_type=operation_type
+    )
+    before_events = Event.objects.count()
+    blocked = transition_library_item(
+        actor_id=actor.id,
+        workshop_id=workshop.id,
+        family="operation_type",
+        item_id=operation_type.id,
+        expected_version=operation_type.version,
+        action="retire",
+    )
+    operation_type.refresh_from_db()
+    assert blocked.code == "unavailable"
+    assert operation_type.status == OperationType.Status.ACTIVE
+    assert Event.objects.count() == before_events
+
 
 pytestmark = pytest.mark.django_db(transaction=True)
 

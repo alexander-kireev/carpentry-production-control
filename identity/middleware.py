@@ -46,6 +46,11 @@ class PreWorkshopAccessMiddleware:
 
             if resolve_materials_access(request.user) is not None:
                 return self.get_response(request)
+        if path == "/workshop/stations" or path.startswith("/workshop/stations/"):
+            from workshops.queries import resolve_stations_access
+
+            if resolve_stations_access(request.user) is not None:
+                return self.get_response(request)
         if path not in allowed:
             return redirect(resolution.destination.value)
         return self.get_response(request)

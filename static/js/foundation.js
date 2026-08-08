@@ -17,6 +17,13 @@
       if (dialog && dialog.dataset.inFlight === undefined) dialog.close();
     }
     if (event.target.closest("[data-toast-close]")) event.target.closest("[data-toast]")?.remove();
+    const disclosure = event.target.closest("[data-station-disclosure]");
+    if (disclosure) {
+      const detail = document.getElementById(disclosure.getAttribute("aria-controls"));
+      const expanded = disclosure.getAttribute("aria-expanded") === "true";
+      disclosure.setAttribute("aria-expanded", String(!expanded));
+      if (detail) detail.hidden = expanded;
+    }
   });
   document.querySelectorAll("dialog").forEach((dialog) => {
     dialog.addEventListener("close", () => lastTrigger?.focus());
