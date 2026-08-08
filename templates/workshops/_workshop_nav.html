@@ -4,5 +4,5 @@
 <nav class="workshop-subnav" aria-label="Workshop sections">
   {% if can_view_libraries %}<a href="{% url 'workshops:libraries' %}"{% if workshop_area == "libraries" %} aria-current="page"{% endif %}>Libraries</a>{% endif %}
   <a href="{% url 'workshops:materials' %}"{% if workshop_area == "materials" %} aria-current="page"{% endif %}>Materials</a>
-  <span aria-disabled="true">Stations <span class="sr-only">unavailable until SC-03</span></span>
+  <a href="{% url 'workshops:stations' %}"{% if workshop_area == "stations" %} aria-current="page"{% endif %}>Stations</a>
 </nav>

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.db.models.functions import Lower
 
@@ -11,6 +12,7 @@ from .models import (
     MaterialVariant,
     OperationType,
     ShiftDefinition,
+    Station,
     UnitType,
     Workshop,
     WorkshopRole,
@@ -43,6 +45,189 @@ class MaterialsAccess:
     workshop: Workshop
     mode: str
     pending_setup: bool
+
+
+@dataclass(frozen=True)
+class StationsAccess:
+    actor: User
+    workshop: Workshop
+    mode: str
+    pending_setup: bool
+
+
+def resolve_stations_access(user):
+    if not getattr(user, "is_authenticated", False):
+        return None
+    try:
+        actor = User.objects.select_related("workshop", "workshop_role").get(pk=user.pk)
+        resolve_protected_configuration()
+        verify_workshop_protected_pair(actor.workshop)
+    except User.DoesNotExist, Workshop.DoesNotExist, ProtectedConfigurationError:
+        return None
+    role = actor.workshop_role
+    if (
+        actor.status != User.Status.ACTIVE
+        or actor.onboarding_state is not None
+        or actor.workshop_id is None
+        or role is None
+        or role.status != WorkshopRole.Status.ACTIVE
+    ):
+        return None
+    exact_admin = (
+        actor.account_role == User.AccountRole.ADMIN
+        and role.workshop_id is None
+        and role.machine_key == "admin"
+        and role.name == "Admin"
+    )
+    exact_member = (
+        actor.account_role in {User.AccountRole.MANAGER, User.AccountRole.OPERATOR}
+        and role.machine_key != "admin"
+        and role.workshop_id in {None, actor.workshop_id}
+    )
+    if exact_admin and actor.workshop.status in {
+        Workshop.Status.MANAGER_ACTIVATION_PENDING,
+        Workshop.Status.OPERATIONAL,
+    }:
+        return StationsAccess(
+            actor,
+            actor.workshop,
+            "admin",
+            actor.workshop.status == Workshop.Status.MANAGER_ACTIVATION_PENDING,
+        )
+    if exact_member and actor.workshop.status == Workshop.Status.OPERATIONAL:
+        return StationsAccess(actor, actor.workshop, actor.account_role, False)
+    return None
+
+
+def _station_capability_options(workshop):
+    return (
+        OperationType.objects.filter(
+            status=OperationType.Status.ACTIVE, is_production=True
+        )
+        .filter(
+            Q(workshop=workshop)
+            | Q(workshop__isnull=True, machine_key="other", name="Other")
+        )
+        .order_by(Lower("name"), "id")
+    )
+
+
+def _project_station(access, station):
+    row = {
+        "code": station.code,
+        "name": station.name,
+        "lifecycle": station.lifecycle_status,
+        "availability": station.availability_status,
+        "capabilities": [
+            {"id": link.operation_type_id, "label": link.operation_type.name}
+            for link in station.supported_operation_links.all()
+        ],
+    }
+    if access.mode == "admin":
+        row.update(
+            id=station.id,
+            version=station.version,
+            can_edit=station.lifecycle_status == Station.LifecycleStatus.ACTIVE,
+            can_retire=station.lifecycle_status == Station.LifecycleStatus.ACTIVE,
+        )
+    return row
+
+
+def get_stations_catalogue(
+    user,
+    *,
+    search="",
+    lifecycle=None,
+    availability=None,
+    capability_id=None,
+    page=None,
+    page_size=None,
+):
+    access = resolve_stations_access(user)
+    if access is None:
+        return None
+    safe_search = search.strip()
+    safe_lifecycle = lifecycle if lifecycle in {"active", "retired"} else ""
+    safe_availability = (
+        availability if availability in {"available", "offline", "broken"} else ""
+    )
+    try:
+        safe_page_size = int(page_size)
+    except TypeError, ValueError:
+        safe_page_size = 20
+    if safe_page_size not in {20, 50, 100}:
+        safe_page_size = 20
+    options = list(_station_capability_options(access.workshop))
+    option_ids = {row.id for row in options}
+    try:
+        safe_capability_id = int(capability_id) if capability_id else None
+    except TypeError, ValueError:
+        safe_capability_id = None
+    if safe_capability_id not in option_ids:
+        safe_capability_id = None
+    rows = (
+        Station.objects.filter(workshop=access.workshop)
+        .prefetch_related("supported_operation_links__operation_type")
+        .order_by("code", "id")
+    )
+    if safe_search:
+        rows = rows.filter(
+            Q(code__icontains=safe_search)
+            | Q(name__icontains=safe_search)
+            | Q(supported_operation_links__operation_type__name__icontains=safe_search)
+        ).distinct()
+    if safe_lifecycle:
+        rows = rows.filter(lifecycle_status=safe_lifecycle)
+    if safe_availability:
+        rows = rows.filter(availability_status=safe_availability)
+    if safe_capability_id:
+        rows = rows.filter(
+            supported_operation_links__operation_type_id=safe_capability_id
+        )
+    paginator = Paginator(rows, safe_page_size)
+    try:
+        safe_page = int(page)
+    except TypeError, ValueError:
+        safe_page = 1
+    page_obj = paginator.get_page(safe_page if safe_page > 0 else 1)
+    return {
+        "mode": access.mode,
+        "pending_setup": access.pending_setup,
+        "workshop_name": access.workshop.name,
+        "stations": [_project_station(access, row) for row in page_obj.object_list],
+        "capability_options": [{"id": row.id, "label": row.name} for row in options],
+        "page_obj": page_obj,
+        "filters": {
+            "q": safe_search,
+            "lifecycle": safe_lifecycle,
+            "availability": safe_availability,
+            "capability": safe_capability_id or "",
+            "page_size": safe_page_size,
+        },
+    }
+
+
+def get_station_detail(user, station_code):
+    access = resolve_stations_access(user)
+    if access is None:
+        return None
+    station = (
+        Station.objects.filter(workshop=access.workshop, code=station_code)
+        .prefetch_related("supported_operation_links__operation_type")
+        .first()
+    )
+    if station is None:
+        return None
+    return {
+        "mode": access.mode,
+        "pending_setup": access.pending_setup,
+        "workshop_name": access.workshop.name,
+        "station": _project_station(access, station),
+        "capability_options": [
+            {"id": row.id, "label": row.name}
+            for row in _station_capability_options(access.workshop)
+        ],
+    }
 
 
 def resolve_libraries_access(user):

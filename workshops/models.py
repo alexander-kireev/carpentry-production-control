@@ -364,6 +364,89 @@ class WorkshopRoleDefaultClearance(models.Model):
         ]
 
 
+class Station(models.Model):
+    class LifecycleStatus(models.TextChoices):
+        ACTIVE = "active", "Active"
+        RETIRED = "retired", "Retired"
+
+    class AvailabilityStatus(models.TextChoices):
+        AVAILABLE = "available", "Available"
+        OFFLINE = "offline", "Offline"
+        BROKEN = "broken", "Broken"
+
+    workshop = models.ForeignKey(
+        Workshop, on_delete=models.RESTRICT, related_name="stations"
+    )
+    code = models.TextField()
+    name = models.TextField()
+    lifecycle_status = models.TextField(
+        choices=LifecycleStatus.choices,
+        default=LifecycleStatus.ACTIVE,
+        db_default="active",
+    )
+    availability_status = models.TextField(
+        choices=AvailabilityStatus.choices,
+        default=AvailabilityStatus.AVAILABLE,
+        db_default="available",
+    )
+    version = models.PositiveIntegerField(default=1, db_default=1)
+    supported_operation_types = models.ManyToManyField(
+        OperationType,
+        through="StationSupportedOperationType",
+        related_name="supporting_stations",
+    )
+
+    class Meta:
+        db_table = "station"
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(name=""), name="cst_sc03_station_name_nonblank"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(lifecycle_status__in=("active", "retired"))
+                & models.Q(availability_status__in=("available", "offline", "broken"))
+                & models.Q(version__gt=0),
+                name="cst_073_station_state_version",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(lifecycle_status="retired")
+                | models.Q(availability_status="offline"),
+                name="cst_072_station_retired_offline",
+            ),
+            models.UniqueConstraint(
+                fields=("workshop", "code"), name="cst_071_station_code_uniq"
+            ),
+            models.UniqueConstraint(
+                Lower("name"),
+                "workshop",
+                condition=models.Q(lifecycle_status="active"),
+                name="cst_070_station_active_name_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("workshop", "lifecycle_status"),
+                name="idx_023_station_scope",
+            )
+        ]
+
+
+class StationSupportedOperationType(models.Model):
+    pk = models.CompositePrimaryKey("station_id", "operation_type_id")
+    station = models.ForeignKey(
+        Station, on_delete=models.CASCADE, related_name="supported_operation_links"
+    )
+    operation_type = models.ForeignKey(
+        OperationType, on_delete=models.RESTRICT, related_name="station_support_links"
+    )
+
+    class Meta:
+        db_table = "station_supported_operation_type"
+        indexes = [
+            models.Index(fields=("operation_type",), name="idx_031_station_support")
+        ]
+
+
 class ConfigurationCommandReceipt(models.Model):
     workshop = models.ForeignKey(
         Workshop, on_delete=models.RESTRICT, related_name="configuration_receipts"

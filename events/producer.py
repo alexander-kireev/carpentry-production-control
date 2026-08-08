@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Iterable
 
-from django.db import transaction
+from django.db import models, transaction
 
 from .models import Event, EventNotificationIntent, EventSubject
 
@@ -39,6 +39,10 @@ ALLOWED_EVENT_TYPES = frozenset(
         "MATERIAL_VARIANT_RETIRED",
         "MATERIAL_VARIANT_RESTORED",
         "MATERIAL_STOCK_REPLENISHED",
+        "STATION_CREATED",
+        "STATION_UPDATED",
+        "STATION_RETIRED",
+        "OPERATION_TYPE_CAPABILITY_LOST",
     }
 )
 
@@ -97,6 +101,14 @@ def _validate_configuration_subjects(spec):
         WorkshopRole,
     )
 
+    if spec.event_type in {
+        "STATION_CREATED",
+        "STATION_UPDATED",
+        "STATION_RETIRED",
+        "OPERATION_TYPE_CAPABILITY_LOST",
+    }:
+        _validate_station_subjects(spec)
+        return
     if spec.event_type in MATERIAL_EVENT_TYPES:
         _validate_material_subjects(spec)
         return
@@ -137,6 +149,62 @@ def _validate_configuration_subjects(spec):
         raise ValueError("Invalid related subjects")
     if not Workshop.objects.filter(pk=source.workshop_id).exists():
         raise ValueError("Invalid Workshop subject")
+
+
+def _validate_station_subjects(spec):
+    from workshops.models import OperationType, Station, Workshop
+
+    if spec.event_type == "OPERATION_TYPE_CAPABILITY_LOST":
+        if spec.primary_subject_type != "operation_type" or not spec.primary_subject_id:
+            raise ValueError("Invalid primary subject")
+        operation_type = OperationType.objects.filter(
+            pk=spec.primary_subject_id
+        ).first()
+        if operation_type is None or operation_type.workshop_id is None:
+            raise ValueError("Invalid primary subject")
+        if len(spec.subjects) != 2:
+            raise ValueError("Invalid related subjects")
+        workshop_subject, station_subject = spec.subjects
+        station = Station.objects.filter(pk=station_subject.subject_id).first()
+        if (
+            workshop_subject
+            != EventSubjectSpec("workshop", operation_type.workshop_id, "workshop")
+            or station_subject.subject_type != "station"
+            or station_subject.subject_role != "source_station"
+            or station is None
+            or station.workshop_id != operation_type.workshop_id
+        ):
+            raise ValueError("Invalid related subjects")
+        return
+
+    if spec.primary_subject_type != "station" or not spec.primary_subject_id:
+        raise ValueError("Invalid primary subject")
+    station = Station.objects.filter(pk=spec.primary_subject_id).first()
+    if station is None or not Workshop.objects.filter(pk=station.workshop_id).exists():
+        raise ValueError("Invalid primary subject")
+    if not spec.subjects or spec.subjects[0] != EventSubjectSpec(
+        "workshop", station.workshop_id, "workshop"
+    ):
+        raise ValueError("Invalid related subjects")
+    operation_subjects = spec.subjects[1:]
+    if spec.event_type != "STATION_UPDATED" and operation_subjects:
+        raise ValueError("Invalid related subjects")
+    operation_ids = [subject.subject_id for subject in operation_subjects]
+    if operation_ids != sorted(set(operation_ids)):
+        raise ValueError("Invalid related subjects")
+    if any(
+        subject.subject_type != "operation_type"
+        or subject.subject_role != "changed_capability"
+        for subject in operation_subjects
+    ):
+        raise ValueError("Invalid related subjects")
+    if operation_ids:
+        valid = OperationType.objects.filter(pk__in=operation_ids).filter(
+            models.Q(workshop_id=station.workshop_id)
+            | models.Q(workshop__isnull=True, machine_key="other")
+        )
+        if valid.count() != len(operation_ids):
+            raise ValueError("Invalid related subjects")
 
 
 def _validate_material_subjects(spec):

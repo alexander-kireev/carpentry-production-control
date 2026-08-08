@@ -1,0 +1,44 @@
+<div class="station-detail">
+  <dl class="facts">
+    <div class="fact"><dt>Code</dt><dd>{{ station.code }}</dd></div>
+    <div class="fact"><dt>Lifecycle</dt><dd>{{ station.lifecycle|title }}</dd></div>
+    <div class="fact"><dt>Availability</dt><dd>{{ station.availability|title }}</dd></div>
+    <div class="fact"><dt>Supported operations</dt><dd>{% for capability in station.capabilities %}{{ capability.label }}{% if not forloop.last %}, {% endif %}{% empty %}None{% endfor %}</dd></div>
+  </dl>
+  <div class="actions">
+    <a class="btn" href="{% url 'workshops:station-detail' station.code %}">Open station</a>
+    {% if station.can_edit %}<button type="button" class="btn" data-dialog-open="edit-station-{{ station.code }}">Edit</button>{% endif %}
+    {% if station.can_retire %}<button type="button" class="btn" data-dialog-open="retire-station-{{ station.code }}">Retire</button>{% endif %}
+  </div>
+</div>
+
+{% if station.can_edit %}
+  <dialog class="dialog" id="edit-station-{{ station.code }}" aria-labelledby="edit-station-title-{{ station.code }}"{% if station.auto_open_edit %} data-dialog-auto-open{% endif %}>
+    <div class="dialog-head">
+      <div><h2 id="edit-station-title-{{ station.code }}">Edit {{ station.name }}</h2><p>Change the current name and full capability set.</p></div>
+      <button type="button" class="btn dialog-close" data-dialog-close aria-label="Close edit Station form"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+    <div class="dialog-body">
+      {% if station.edit_form.errors %}<div class="alert alert-danger" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}
+      <form method="post" action="{% url 'workshops:station-edit' station.code %}?q={{ filters.q|urlencode }}&amp;lifecycle={{ filters.lifecycle|urlencode }}&amp;availability={{ filters.availability|urlencode }}&amp;capability={{ filters.capability }}&amp;page_size={{ filters.page_size }}&amp;page={{ page_obj.number }}" data-submit-once novalidate>
+        {% csrf_token %}<input type="hidden" name="version" value="{{ station.version }}">{{ station.edit_form.as_div }}
+        <div class="dialog-actions"><button type="button" class="btn" data-dialog-close>Cancel</button><button class="btn btn-primary" type="submit">Save changes</button><span data-submit-status hidden role="status">Saving Station…</span></div>
+      </form>
+    </div>
+  </dialog>
+{% endif %}
+
+{% if station.can_retire %}
+  <dialog class="dialog" id="retire-station-{{ station.code }}" aria-labelledby="retire-station-title-{{ station.code }}"{% if station.auto_open_retire %} data-dialog-auto-open{% endif %}>
+    <div class="dialog-head">
+      <div><h2 id="retire-station-title-{{ station.code }}">Retire {{ station.name }}?</h2><p>This is terminal. The Station becomes Offline and its history is preserved.</p></div>
+      <button type="button" class="btn dialog-close" data-dialog-close aria-label="Close retire Station confirmation"><i class="ti ti-x" aria-hidden="true"></i></button>
+    </div>
+    <div class="dialog-body">
+      <form method="post" action="{% url 'workshops:station-retire' station.code %}?q={{ filters.q|urlencode }}&amp;lifecycle={{ filters.lifecycle|urlencode }}&amp;availability={{ filters.availability|urlencode }}&amp;capability={{ filters.capability }}&amp;page_size={{ filters.page_size }}&amp;page={{ page_obj.number }}" data-submit-once>
+        {% csrf_token %}{{ station.retire_form }}
+        <div class="dialog-actions"><button type="button" class="btn" data-dialog-close>Cancel</button><button class="btn btn-danger" type="submit">Retire station</button><span data-submit-status hidden role="status">Retiring Station…</span></div>
+      </form>
+    </div>
+  </dialog>
+{% endif %}

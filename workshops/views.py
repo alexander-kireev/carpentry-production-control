@@ -15,9 +15,12 @@ from .commands import (
     create_library_item,
     create_material,
     create_material_variant,
+    create_station,
     edit_library_item,
     edit_material,
     edit_material_variant,
+    edit_station,
+    retire_station,
     transition_library_item,
     transition_material,
     transition_material_variant,
@@ -27,6 +30,8 @@ from .forms import (
     MaterialForm,
     MaterialTransitionForm,
     MaterialVariantForm,
+    StationForm,
+    StationRetireForm,
 )
 from .models import OperationType
 from .queries import (
@@ -35,8 +40,11 @@ from .queries import (
     get_material_detail,
     get_material_variant_detail,
     get_materials_catalogue,
+    get_station_detail,
+    get_stations_catalogue,
     resolve_libraries_access,
     resolve_materials_access,
+    resolve_stations_access,
 )
 
 
@@ -45,6 +53,213 @@ def _denied(request):
     if destination.supported:
         return redirect(str(destination.destination))
     raise Http404
+
+
+def _station_choices(catalogue):
+    return tuple((row["id"], row["label"]) for row in catalogue["capability_options"])
+
+
+def _station_catalogue(request, access):
+    return get_stations_catalogue(
+        access.actor,
+        search=request.GET.get("q", ""),
+        lifecycle=request.GET.get("lifecycle"),
+        availability=request.GET.get("availability"),
+        capability_id=request.GET.get("capability"),
+        page=request.GET.get("page"),
+        page_size=request.GET.get("page_size"),
+    )
+
+
+def _station_form(catalogue, *, data=None, initial=None, edit=False):
+    return StationForm(
+        data=data,
+        initial=initial or ({"submission_key": uuid.uuid4()} if not edit else None),
+        capability_choices=_station_choices(catalogue),
+        edit=edit,
+    )
+
+
+def _render_stations(
+    request, access, *, result=None, bound=None, data=None, status=200
+):
+    fresh = resolve_stations_access(request.user)
+    if fresh is None or fresh.mode != access.mode:
+        return _denied(request)
+    access = fresh
+    catalogue = _station_catalogue(request, access)
+    if catalogue is None:
+        return _denied(request)
+    if access.mode == "admin":
+        for row in catalogue["stations"]:
+            row["edit_form"] = _station_form(
+                catalogue,
+                data=data if bound == f"edit-{row['code']}" else None,
+                initial={
+                    "name": row["name"],
+                    "capability_ids": [item["id"] for item in row["capabilities"]],
+                },
+                edit=True,
+            )
+            row["retire_form"] = StationRetireForm(initial={"version": row["version"]})
+            row["auto_open_edit"] = bound == f"edit-{row['code']}"
+            row["auto_open_retire"] = bound == f"retire-{row['code']}"
+    context = {
+        **catalogue,
+        "identity_user": access.actor,
+        "workshop_section": True,
+        "workshop_area": "stations",
+        "can_view_libraries": access.mode in {"admin", "manager"},
+        "station_form": _station_form(
+            catalogue, data=data if bound == "create" else None
+        )
+        if access.mode == "admin"
+        else None,
+        "can_mutate": access.mode == "admin",
+        "result": result,
+        "feedback": pop_feedback(request),
+        "open_dialog": bound,
+    }
+    return render(request, "workshops/stations.html", context, status=status)
+
+
+@require_GET
+def stations(request):
+    access = resolve_stations_access(request.user)
+    return _denied(request) if access is None else _render_stations(request, access)
+
+
+def _station_result_response(request, access, result, *, bound=None, data=None):
+    if result.code in {"committed", "recovered"}:
+        set_feedback(
+            request,
+            title="Change committed"
+            if result.code == "committed"
+            else "Change recovered",
+            body="Station configuration has been refreshed.",
+        )
+        return redirect(reverse("workshops:stations"))
+    return _render_stations(
+        request, access, result=result.code, bound=bound, data=data, status=400
+    )
+
+
+@require_POST
+def station_create(request):
+    access = resolve_stations_access(request.user)
+    if access is None or access.mode != "admin":
+        return _denied(request)
+    catalogue = get_stations_catalogue(access.actor)
+    form = _station_form(catalogue, data=request.POST)
+    if not form.is_valid():
+        return _render_stations(
+            request,
+            access,
+            result="invalid",
+            bound="create",
+            data=request.POST,
+            status=400,
+        )
+    data = dict(form.cleaned_data)
+    result = create_station(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        submission_key=str(data.pop("submission_key")),
+        data=data,
+    )
+    return _station_result_response(
+        request, access, result, bound="create", data=request.POST
+    )
+
+
+@require_GET
+def station_detail(request, station_code):
+    access = resolve_stations_access(request.user)
+    if access is None:
+        return _denied(request)
+    projection = get_station_detail(access.actor, station_code)
+    if projection is None:
+        raise Http404
+    station = projection["station"]
+    if access.mode == "admin":
+        station["edit_form"] = _station_form(
+            projection,
+            initial={
+                "name": station["name"],
+                "capability_ids": [item["id"] for item in station["capabilities"]],
+            },
+            edit=True,
+        )
+        station["retire_form"] = StationRetireForm(
+            initial={"version": station["version"]}
+        )
+    return render(
+        request,
+        "workshops/station_detail.html",
+        {
+            **projection,
+            "identity_user": access.actor,
+            "workshop_section": True,
+            "workshop_area": "stations",
+            "can_view_libraries": access.mode in {"admin", "manager"},
+        },
+    )
+
+
+@require_POST
+def station_edit(request, station_code):
+    access = resolve_stations_access(request.user)
+    if access is None or access.mode != "admin":
+        return _denied(request)
+    catalogue = get_stations_catalogue(access.actor)
+    form = _station_form(catalogue, data=request.POST, edit=True)
+    if not form.is_valid():
+        return _render_stations(
+            request,
+            access,
+            result="invalid",
+            bound=f"edit-{station_code}",
+            data=request.POST,
+            status=400,
+        )
+    result = edit_station(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        station_code=station_code,
+        expected_version=request.POST.get("version"),
+        data=form.cleaned_data,
+    )
+    return _station_result_response(
+        request, access, result, bound=f"edit-{station_code}", data=request.POST
+    )
+
+
+@require_POST
+def station_retire(request, station_code):
+    access = resolve_stations_access(request.user)
+    if access is None or access.mode != "admin":
+        return _denied(request)
+    form = StationRetireForm(request.POST)
+    if not form.is_valid():
+        projection = get_station_detail(access.actor, station_code)
+        if projection is None:
+            return _denied(request)
+        return _render_stations(
+            request,
+            access,
+            result="invalid",
+            bound=f"retire-{projection['station']['code']}",
+            status=400,
+        )
+    result = retire_station(
+        actor_id=access.actor.id,
+        workshop_id=access.workshop.id,
+        station_code=station_code,
+        expected_version=form.cleaned_data["version"],
+    )
+    return _station_result_response(
+        request, access, result, bound=f"retire-{station_code}"
+    )
 
 
 def _clearance_choices(workshop_id):
