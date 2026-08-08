@@ -475,7 +475,8 @@ def test_saved_workshop_and_manager_render_exact_safe_status_truth(client, monke
         "identity.views.get_pending_manager_setup", sent_expired_projection
     )
     manager = client.get("/onboarding/manager").content.decode("utf-8")
-    assert "Provider accepted; inbox delivery is not confirmed" in manager
+    assert "Provider accepted" in manager
+    assert "Inbox delivery is not confirmed" in manager
     assert "Expired" in manager
     assert all(
         secret not in manager.lower()

@@ -22,7 +22,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 def _assert_filters_retained(content, *, query, status, category_id):
     assert re.search(rf'name="q"[^>]*value="{re.escape(query)}"', content)
-    assert re.search(rf'<option value="{status}"[^>]*selected', content)
+    assert f'name="status" value="{status}"' in content
     assert re.search(rf'<option value="{category_id}"[^>]*selected', content)
 
 
@@ -43,8 +43,8 @@ def test_pending_admin_page_is_accessible_and_preset_is_disabled():
     assert response.status_code == 200
     assert "Workshop setup areas" in content
     assert "Add material" in content
-    assert "Add from presets — unavailable" in content
-    assert re.search(r"<button[^>]*disabled[^>]*>Add from presets", content)
+    assert "Add from presets · SC-04" in content
+    assert re.search(r"<button[^>]*disabled[^>]*>.*Add from presets", content)
     assert "data-submit-once" in content
     assert 'role="status" aria-live="polite"' in content
     assert client.get("/workshop/materials/").status_code in {302, 404}

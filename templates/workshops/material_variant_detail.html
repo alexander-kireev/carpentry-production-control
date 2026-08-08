@@ -1,3 +1,15 @@
 {% extends "base.html" %}
 {% block title %}{{ variant.label }} | Materials{% endblock %}
-{% block content %}{% if pending_setup %}{% include "onboarding/_stage_nav.html" with stage="setup" setup_available=True %}{% endif %}<section class="library-shell"><a class="library-back-link" href="{% url 'workshops:materials' %}">← Materials</a><header class="library-pagehead"><div><p class="eyebrow">Material Variant</p><h1>{{ variant.label }}</h1><p>{{ material.name }} · {{ material.unit }} ({{ material.unit_abbreviation }})</p></div><span class="library-status-chip status-{{ variant.status }}">{{ variant.status|title }}</span></header>{% if pending_setup %}<p>Stock facts become available after setup.</p>{% else %}<dl class="fact-grid"><div><dt>Current stock</dt><dd>{{ variant.current_stock }}</dd></div><div><dt>Reserved</dt><dd>{{ variant.reserved }}</dd></div><div><dt>Available</dt><dd>{{ variant.available }}</dd></div><div><dt>Reservation shortfall</dt><dd>{{ variant.reservation_shortfall }}</dd></div><div><dt>Minimum threshold</dt><dd>{{ variant.min_threshold }}</dd></div><div><dt>Stock status</dt><dd>{{ variant.stock_status|cut:"_"|title }}</dd></div></dl>{% endif %}</section>{% endblock %}
+{% block content %}
+{% if pending_setup %}
+  {% include "onboarding/_stage_nav.html" with stage="setup" setup_available=True %}
+  {% include "onboarding/_setup_tabs.html" with active="materials" %}
+{% else %}
+  {% include "workshops/_workshop_nav.html" with active="materials" %}
+{% endif %}
+<a class="library-back-link" href="{% url 'workshops:materials' %}">← Materials</a>
+<header class="pagehead content-pagehead"><div><p class="eyebrow">Material variant</p><h1>{{ variant.label }}</h1><p>{{ material.name }} · {{ material.unit }} ({{ material.unit_abbreviation }})</p></div><span class="chip status-{{ variant.status }}">{{ variant.status|title }}</span></header>
+<section class="card card-flush">
+{% if pending_setup %}<div class="cardbody"><p>Stock facts become available after setup.</p></div>{% else %}<dl class="facts"><div class="fact"><dt>Current stock</dt><dd>{{ variant.current_stock }}</dd></div><div class="fact"><dt>Reserved</dt><dd>{{ variant.reserved }}</dd></div><div class="fact"><dt>Available</dt><dd>{{ variant.available }}</dd></div><div class="fact"><dt>Reservation shortfall</dt><dd>{{ variant.reservation_shortfall }}</dd></div><div class="fact"><dt>Minimum threshold</dt><dd>{{ variant.min_threshold }}</dd></div><div class="fact"><dt>Stock status</dt><dd>{{ variant.stock_status|cut:"_"|title }}</dd></div></dl>{% endif %}
+</section>
+{% endblock %}

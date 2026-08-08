@@ -4,49 +4,35 @@
   {% endfor %}
 </nav>
 
-<form class="library-filters" method="get" action="{% url 'workshops:libraries' %}" role="search">
+<form class="library-filters filter-toolbar" method="get" action="{% url 'workshops:libraries' %}" role="search">
   <input type="hidden" name="family" value="{{ filters.family }}">
-  <div class="library-search-field">
-    <label for="library-search">Search this library</label>
-    <input id="library-search" name="q" type="search" value="{{ filters.search }}" placeholder="Search by name or label">
-  </div>
-  <div>
-    <label for="library-status">Status</label>
-    <select id="library-status" name="status">
-      <option value=""{% if not filters.status %} selected{% endif %}>All statuses</option>
-      <option value="active"{% if filters.status == "active" %} selected{% endif %}>Active</option>
-      <option value="retired"{% if filters.status == "retired" %} selected{% endif %}>Retired</option>
-      <option value="protected"{% if filters.status == "protected" %} selected{% endif %}>Protected and system</option>
-    </select>
-  </div>
-  <button type="submit" class="library-filter-button">Apply filters</button>
-  {% if filters.search or filters.status %}<a class="library-clear-filter" href="{% url 'workshops:libraries' %}?family={{ filters.family|urlencode }}">Clear filters</a>{% endif %}
+  <input type="hidden" name="status" value="{{ filters.status }}">
+  <div class="filter-search"><label for="library-search">Search {{ families.0.label|lower }}</label><input class="control" id="library-search" name="q" type="search" value="{{ filters.search }}" placeholder="{% if filters.family == 'workshop_role' %}Name or clearance{% else %}Name or label{% endif %}"></div>
+  <div><span class="field-label">Status</span><div class="filter-chips"><a class="filter-chip{% if not filters.status %} active{% endif %}" href="{% url 'workshops:libraries' %}?family={{ filters.family|urlencode }}&amp;q={{ filters.search|urlencode }}">All</a><a class="filter-chip{% if filters.status == 'active' %} active{% endif %}" href="{% url 'workshops:libraries' %}?family={{ filters.family|urlencode }}&amp;status=active&amp;q={{ filters.search|urlencode }}">Active</a><a class="filter-chip{% if filters.status == 'retired' %} active{% endif %}" href="{% url 'workshops:libraries' %}?family={{ filters.family|urlencode }}&amp;status=retired&amp;q={{ filters.search|urlencode }}">Retired</a><a class="filter-chip{% if filters.status == 'protected' %} active{% endif %}" href="{% url 'workshops:libraries' %}?family={{ filters.family|urlencode }}&amp;status=protected&amp;q={{ filters.search|urlencode }}">Protected</a></div></div>
+  <button type="submit" class="btn"><i class="ti ti-search" aria-hidden="true"></i>Apply</button>
 </form>
 
 {% for family in families %}
 <section class="library-family" aria-labelledby="family-{{ family.key }}">
-  <header class="library-family-head">
+  <header class="cardhead library-family-head">
     <div>
-      <p class="eyebrow">Configuration family</p>
       <h2 id="family-{{ family.key }}">{{ family.label }}</h2>
       <p>{% if family.key == "workshop_role" %}Reusable role templates and their default operation clearances. These do not assign a role to a person.{% elif family.key == "operation_type" %}The kinds of work your Workshop plans, produces and controls through clearance.{% elif family.key == "unit_type" %}Consistent measurement names and abbreviations used by Workshop records.{% elif family.key == "material_category" %}The governed categories used to organise Workshop materials.{% else %}Reusable working-time definitions. Actual rota assignments are managed elsewhere.{% endif %}</p>
     </div>
+    <span class="chip chip-neutral">{{ family.rows|length }} row{{ family.rows|length|pluralize }}</span>
+  </header>
     {% if can_mutate %}
-    <button type="button" class="library-add-button" data-dialog-open="create-{{ family.key }}">Add custom {% if family.key == "workshop_role" %}role{% elif family.key == "operation_type" %}operation type{% elif family.key == "unit_type" %}unit{% elif family.key == "material_category" %}material category{% else %}shift{% endif %}</button>
-    <dialog class="library-dialog" id="create-{{ family.key }}" aria-labelledby="create-{{ family.key }}-title"{% if auto_open_create == family.key %} data-dialog-auto-open{% endif %}>
-      <div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close create form">×</button>
-        <h3 id="create-{{ family.key }}-title">Create {% if family.key == "workshop_role" %}role{% elif family.key == "operation_type" %}operation type{% elif family.key == "unit_type" %}unit{% elif family.key == "material_category" %}material category{% else %}shift{% endif %}</h3>
-        <p>Creates a custom row for {{ workshop_name }}. Review the values before saving.</p>
+    <dialog class="library-dialog dialog" id="create-{{ family.key }}" aria-labelledby="create-{{ family.key }}-title"{% if auto_open_create == family.key %} data-dialog-auto-open{% endif %}>
+      <div class="dialog-head"><div><h3 id="create-{{ family.key }}-title">Create {% if family.key == "workshop_role" %}role{% elif family.key == "operation_type" %}operation type{% elif family.key == "unit_type" %}unit{% elif family.key == "material_category" %}material category{% else %}shift{% endif %}</h3><p>Creates a custom row for {{ workshop_name }}. Review the values before saving.</p></div><button type="button" class="btn dialog-close" data-dialog-close aria-label="Close create form"><i class="ti ti-x" aria-hidden="true"></i></button></div>
+      <div class="dialog-body">
         {% if auto_open_create == family.key %}<div class="form-status" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}
         <form method="post" action="{% url 'workshops:library-create' family.key %}?family={{ filters.family|urlencode }}&status={{ filters.status|urlencode }}&q={{ filters.search|urlencode }}" novalidate data-submit-once>
           {% csrf_token %}
           {% if family.key == "workshop_role" %}{{ forms.workshop_role.as_div }}{% elif family.key == "operation_type" %}{{ forms.operation_type.as_div }}{% elif family.key == "unit_type" %}{{ forms.unit_type.as_div }}{% elif family.key == "material_category" %}{{ forms.material_category.as_div }}{% else %}{{ forms.shift_definition.as_div }}{% endif %}
-          <button type="submit">Save custom row</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Creating custom row…</span>
-        </form>
-      </div>
+          <div class="dialog-actions"><button type="button" class="btn" data-dialog-close>Cancel</button><button type="submit" class="btn btn-primary">Save custom row</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Creating custom row…</span></div>
+        </form></div>
     </dialog>
     {% endif %}
-  </header>
 
   {% if family.rows %}
   <div class="table-scroll"><table class="library-table">
@@ -61,7 +47,7 @@
       <td><span class="library-status-chip status-{{ row.status }}">{{ row.status|capfirst }}</span>{% if row.protected %}<span class="library-status-chip status-system">Protected</span>{% elif row.system %}<span class="library-status-chip status-system">System</span>{% endif %}</td>
       {% if can_mutate %}<td class="library-actions">
         {% if row.can_edit %}<button type="button" class="button-secondary-light" data-dialog-open="edit-{{ family.key }}-{{ row.id }}">Edit</button><dialog class="library-dialog" id="edit-{{ family.key }}-{{ row.id }}" aria-labelledby="edit-{{ family.key }}-{{ row.id }}-title"{% if row.auto_open_edit %} data-dialog-auto-open{% endif %}><div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close edit form">×</button><h3 id="edit-{{ family.key }}-{{ row.id }}-title">Edit {{ row.label }}</h3>{% if row.edit_form.errors %}<div class="form-status" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}<form method="post" action="{% url 'workshops:library-edit' family.key row.id %}?family={{ filters.family|urlencode }}&status={{ filters.status|urlencode }}&q={{ filters.search|urlencode }}" novalidate data-submit-once>{% csrf_token %}<input type="hidden" name="version" value="{{ row.version }}">{{ row.edit_form.as_div }}<button type="submit">Save changes</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Saving changes…</span></form></div></dialog>{% endif %}
-        {% if row.can_retire %}<details class="row-menu"><summary aria-label="More actions for {{ row.label }}">More actions</summary><button type="button" class="button-danger" data-dialog-open="retire-{{ family.key }}-{{ row.id }}">Retire</button></details><dialog class="library-dialog library-confirm-dialog" id="retire-{{ family.key }}-{{ row.id }}" aria-labelledby="retire-{{ family.key }}-{{ row.id }}-title"><div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close retirement confirmation">×</button><h3 id="retire-{{ family.key }}-{{ row.id }}-title">Retire {{ row.label }}?</h3><p>The row will leave active selection lists but remain in Workshop history. Existing dependencies may block retirement; no partial change will be saved.</p><div class="library-confirm-actions"><button type="button" class="button-secondary-light" data-dialog-close>Cancel</button><form method="post" action="{% url 'workshops:library-transition' family.key row.id 'retire' %}?family={{ filters.family|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;q={{ filters.search|urlencode }}" data-submit-once>{% csrf_token %}<input type="hidden" name="version" value="{{ row.version }}"><button type="submit" class="button-danger">Confirm retirement</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Retiring row…</span></form></div></div></dialog>{% elif row.can_restore %}<details class="row-menu"><summary aria-label="More actions for {{ row.label }}">More actions</summary><form method="post" action="{% url 'workshops:library-transition' family.key row.id 'restore' %}?family={{ filters.family|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;q={{ filters.search|urlencode }}" data-submit-once>{% csrf_token %}<input type="hidden" name="version" value="{{ row.version }}"><button type="submit" class="button-secondary-light">Restore</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Restoring row…</span></form></details>{% elif not row.can_edit %}<span class="library-action-note">System-managed row. Actions are unavailable.</span>{% endif %}
+        {% if row.can_retire %}<details class="row-menu"><summary aria-label="More actions for {{ row.label }}"><i class="ti ti-dots" aria-hidden="true"></i></summary><button type="button" class="button-danger" data-dialog-open="retire-{{ family.key }}-{{ row.id }}">Retire</button></details><dialog class="library-dialog library-confirm-dialog" id="retire-{{ family.key }}-{{ row.id }}" aria-labelledby="retire-{{ family.key }}-{{ row.id }}-title"><div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close retirement confirmation">×</button><h3 id="retire-{{ family.key }}-{{ row.id }}-title">Retire {{ row.label }}?</h3><p>The row will leave active selection lists but remain in Workshop history. Existing dependencies may block retirement; no partial change will be saved.</p><div class="library-confirm-actions"><button type="button" class="button-secondary-light" data-dialog-close>Cancel</button><form method="post" action="{% url 'workshops:library-transition' family.key row.id 'retire' %}?family={{ filters.family|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;q={{ filters.search|urlencode }}" data-submit-once>{% csrf_token %}<input type="hidden" name="version" value="{{ row.version }}"><button type="submit" class="button-danger">Confirm retirement</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Retiring row…</span></form></div></div></dialog>{% elif row.can_restore %}<details class="row-menu"><summary aria-label="More actions for {{ row.label }}"><i class="ti ti-dots" aria-hidden="true"></i></summary><form method="post" action="{% url 'workshops:library-transition' family.key row.id 'restore' %}?family={{ filters.family|urlencode }}&amp;status={{ filters.status|urlencode }}&amp;q={{ filters.search|urlencode }}" data-submit-once>{% csrf_token %}<input type="hidden" name="version" value="{{ row.version }}"><button type="submit" class="button-secondary-light">Restore</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Restoring row…</span></form></details>{% endif %}
       </td>{% endif %}
     </tr>{% endfor %}</tbody>
   </table></div>

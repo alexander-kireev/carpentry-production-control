@@ -2,7 +2,7 @@
 {% block title %}Workshop setup | Carpentry Production Control{% endblock %}
 {% block content %}
 {% include "onboarding/_stage_nav.html" with stage="setup" setup_available=True %}
-<header class="pagehead"><p class="eyebrow">Administrator onboarding</p><h1>Workshop setup</h1><p>Build the reusable configuration your team will use when the Workshop becomes operational.</p></header>
-<nav class="section-tabs setup-area-tabs" aria-label="Workshop setup areas"><a href="{% url 'onboarding-setup' %}" aria-current="page">Libraries</a><a href="{% url 'workshops:materials' %}">Materials</a><span aria-disabled="true">Stations — coming in SC-03</span></nav>
-<section class="library-shell" aria-labelledby="libraries-title"><header class="library-pagehead"><div><p class="eyebrow">Workshop configuration</p><h2 id="libraries-title">Libraries</h2><p class="library-purpose">Define roles, operation types, units, material categories and shifts for {{ workshop_name }}.</p></div><span class="library-context">{{ workshop_name }}</span></header><aside class="library-preset-preview"><div><p class="eyebrow">Coming in SC-04</p><h3>Add from presets</h3><p>The structure is ready; preset choices are not available yet.</p></div><button type="button" disabled aria-disabled="true"><i class="ti ti-package-import" aria-hidden="true"></i>Add from presets — unavailable</button></aside>{% include "workshops/_library_family.html" with can_mutate=True %}</section>
+<header class="pagehead"><div><p class="eyebrow">Configuration workspace</p><h1>Workshop setup</h1><p>Configure the vocabulary and resources used by this Workshop. Each confirmed change is saved independently.</p></div></header>
+{% include "onboarding/_setup_tabs.html" with active="libraries" %}
+{% include "workshops/_libraries_catalogue.html" with can_mutate=True %}
 {% endblock %}

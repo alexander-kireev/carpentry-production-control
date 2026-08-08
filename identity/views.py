@@ -567,5 +567,6 @@ def dashboard(request):
             "stage": "operational",
             "role_home": resolution.role_home,
             "libraries_available": resolution.role_home in {"admin", "manager"},
+            "dashboard_section": True,
         },
     )

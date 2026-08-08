@@ -1,0 +1,5 @@
+<nav class="setup-area-tabs" aria-label="Workshop setup areas">
+  <a href="{% url 'onboarding-setup' %}"{% if active == "libraries" %} aria-current="page"{% endif %}>Libraries</a>
+  <a href="{% url 'workshops:materials' %}"{% if active == "materials" %} aria-current="page"{% endif %}>Materials</a>
+  <span aria-disabled="true">Stations <span class="sr-only">unavailable until SC-03</span></span>
+</nav>

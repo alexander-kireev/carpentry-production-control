@@ -143,6 +143,9 @@ def _render(
     context = {
         **catalogue,
         "identity_user": access.actor,
+        "workshop_section": True,
+        "workshop_area": "libraries",
+        "can_view_libraries": True,
         "family_labels": FAMILY_LABELS,
         "forms": render_forms,
         "auto_open_create": next(
@@ -431,6 +434,9 @@ def _render_materials(
     context = {
         **catalogue,
         "identity_user": access.actor,
+        "workshop_section": True,
+        "workshop_area": "materials",
+        "can_view_libraries": access.mode in {"admin", "manager"},
         "result": result,
         "feedback": pop_feedback(request),
         "material_form": _material_forms(catalogue, bound=bound, data=data)
@@ -496,7 +502,13 @@ def material_detail(request, material_id):
     return render(
         request,
         "workshops/material_detail.html",
-        {**projection, "identity_user": access.actor},
+        {
+            **projection,
+            "identity_user": access.actor,
+            "workshop_section": True,
+            "workshop_area": "materials",
+            "can_view_libraries": access.mode in {"admin", "manager"},
+        },
     )
 
 
@@ -511,7 +523,13 @@ def material_variant_detail(request, variant_id):
     return render(
         request,
         "workshops/material_variant_detail.html",
-        {**projection, "identity_user": access.actor},
+        {
+            **projection,
+            "identity_user": access.actor,
+            "workshop_section": True,
+            "workshop_area": "materials",
+            "can_view_libraries": access.mode in {"admin", "manager"},
+        },
     )
 
 

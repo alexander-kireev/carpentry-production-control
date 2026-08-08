@@ -37,7 +37,7 @@ def test_pending_admin_can_revisit_all_three_stage_destinations():
         assert b"Workshop setup" in response.content
     setup = client.get("/onboarding/setup").content
     assert b"Stations" in setup
-    assert b"coming in SC-03" in setup
+    assert b"unavailable until SC-03" in setup
     assert b"Add from presets" in setup
     assert b"disabled" in setup
     manager = client.get("/onboarding/manager").content.decode("utf-8")
@@ -55,7 +55,7 @@ def test_shared_interaction_contract_is_external_and_feedback_is_temporary():
     assert "data-toast-close" in html
     assert "/static/js/foundation.js" in html
     assert "@tabler/icons-webfont@3" in html
-    assert 'class="workshop-identity" href="/onboarding/workshop"' in html
+    assert 'class="appbar-context" href="/onboarding/workshop"' in html
     assert "setTimeout(() => toast.remove(), remaining)" not in html
 
 
@@ -77,4 +77,7 @@ def test_shared_script_has_hard_submit_busy_dialog_and_stateful_toast_contract(
     css = (settings.BASE_DIR / "static/css/foundation.css").read_text(
         encoding="utf-8", errors="strict"
     )
-    assert ".library-shell h1 { font-size: clamp(1.5rem, 4vw, 1.75rem); }" in css
+    assert "--surface-0: #f4f4f5" in css
+    assert "--surface-2: #fff" in css
+    assert ".library-shell h1" not in css
+    assert ".appbar" in css and ".workshop-subnav" in css

@@ -1,0 +1,10 @@
+<section class="catalogue" aria-labelledby="libraries-title">
+  <header class="content-pagehead">
+    <div><p class="eyebrow">Workshop configuration</p><h2 id="libraries-title">Libraries</h2><p>Manage the shared names and rules used by Workshop configuration.</p></div>
+    <div class="page-actions">
+      {% if can_mutate %}<button type="button" class="btn btn-primary" data-dialog-open="create-{{ families.0.key }}"><i class="ti ti-plus" aria-hidden="true"></i>Add {{ families.0.label|lower }}</button><button type="button" class="btn" disabled aria-disabled="true"><i class="ti ti-package-import" aria-hidden="true"></i>Add from presets · SC-04</button>{% else %}<span class="chip chip-neutral">Read-only</span>{% endif %}
+    </div>
+  </header>
+  {% if result and result != "success" and result != "replay" %}<div class="alert alert-danger" role="alert">{% if result == "stale" %}This row changed. Refresh before trying again.{% elif result == "validation_error" %}Nothing was saved. Correct the highlighted fields.{% else %}This action is unavailable. Nothing was changed.{% endif %}</div>{% endif %}
+  {% include "workshops/_library_family.html" %}
+</section>

@@ -10,16 +10,27 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
   </head>
   <body>
-    <main class="{% if identity_user %}onboarding-shell{% else %}public-shell{% endif %}">
-      <header class="shell-header">
-        {% if identity_user %}<a class="brand" href="{% url 'onboarding-resolver' %}" aria-label="Carpentry Production Control home">CPC</a>{% else %}<div class="brand" aria-label="Carpentry Production Control">CPC</div>{% endif %}
-        {% if identity_user %}
-          {% if identity_user.workshop and identity_user.workshop.status != "operational" %}<a class="workshop-identity" href="{% url 'onboarding-workshop' %}">{{ identity_user.workshop.name }}</a>{% endif %}
-          {% if identity_user.workshop.status == "operational" %}<nav class="role-nav" aria-label="Workshop">{% if identity_user.account_role != "operator" %}<a href="{% url 'workshops:libraries' %}">Libraries</a>{% endif %}<a href="{% url 'workshops:materials' %}">Materials</a></nav>{% endif %}
-          <div class="own-identity" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div>
-          <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="button-secondary">Log out</button></form>
-        {% endif %}
+    {% if identity_user and identity_user.workshop.status == "operational" %}
+    <header class="appbar">
+      <div class="appbar-in">
+        <a class="appbar-brand" href="{% url 'dashboard' %}"><strong>CPC</strong><span>{{ identity_user.workshop.name }}</span></a>
+        <nav class="appnav" aria-label="Primary navigation">
+          <a href="{% url 'dashboard' %}"{% if dashboard_section %} aria-current="page"{% endif %}>Dashboard</a>
+          <a href="{% if identity_user.account_role == 'operator' %}{% url 'workshops:materials' %}{% else %}{% url 'workshops:libraries' %}{% endif %}"{% if workshop_section %} aria-current="page"{% endif %}>Workshop</a>
+        </nav>
+        <div class="appbar-user" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div>
+        <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="btn">Log out</button></form>
+      </div>
+    </header>
+    <main class="page operational-page">
+    {% else %}
+    <main class="{% if identity_user %}page-wide onboarding-shell{% else %}public-shell{% endif %}">
+      <header class="onboarding-appbar">
+        {% if identity_user %}<a class="appbar-brand" href="{% url 'onboarding-resolver' %}" aria-label="Carpentry Production Control home"><strong>CPC</strong></a>{% else %}<div class="appbar-brand" aria-label="Carpentry Production Control"><strong>CPC</strong></div>{% endif %}
+        {% if identity_user and identity_user.workshop %}<a class="appbar-context" href="{% url 'onboarding-workshop' %}">{{ identity_user.workshop.name }}</a>{% endif %}
+        {% if identity_user %}<div class="appbar-user" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div><form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="btn">Log out</button></form>{% endif %}
       </header>
+    {% endif %}
       {% include "includes/feedback.html" %}
       {% block content %}{% endblock %}
     </main>

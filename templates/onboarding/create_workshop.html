@@ -2,10 +2,19 @@
 {% block title %}Create Workshop | Carpentry Production Control{% endblock %}
 {% block content %}
 {% include "onboarding/_stage_nav.html" with stage="workshop" setup_available=False %}
-<header class="pagehead"><p class="eyebrow">Administrator onboarding</p><h1>Create your Workshop</h1><p>Save the identity and timezone that anchor configuration and invitations.</p></header>
-<section class="surface-card"><div class="card-body">
-  {% if generic_error %}<div class="alert alert-danger" role="alert">{{ generic_error }}</div>{% endif %}
-  {% if form.errors %}<div class="alert alert-danger" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}
-  <form method="post" action="{% url 'onboarding-workshop' %}" data-submit-once novalidate>{% csrf_token %}{{ form.as_div }}<div class="form-actions"><button type="submit"><i class="ti ti-device-floppy" aria-hidden="true"></i>Save Workshop</button><span hidden data-submit-status role="status">Saving Workshop…</span></div></form>
-</div></section>
+<header class="pagehead"><div><p class="eyebrow">Workshop identity</p><h1>Create your Workshop</h1><p>Add the permanent organisation details used for Workshop-local planning and time.</p></div></header>
+<section class="card card-flush" aria-labelledby="create-heading">
+  <header class="cardhead"><div><h2 id="create-heading">Workshop details</h2><p>All fields are required.</p></div></header>
+  <form method="post" action="{% url 'onboarding-workshop' %}" data-submit-once novalidate>{% csrf_token %}{{ form.submission_nonce }}{{ form.expected_user_version }}
+    <div class="cardbody form-grid">
+      {% if generic_error %}<div class="alert alert-danger field-wide" role="alert">{{ generic_error }}</div>{% endif %}
+      {% if form.errors %}<div class="alert alert-danger field-wide" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}
+      <div class="field field-wide">{{ form.name.label_tag }}{{ form.name }}{{ form.name.errors }}</div>
+      <div class="field field-wide">{{ form.address.label_tag }}{{ form.address }}{{ form.address.errors }}</div>
+      <div class="field">{{ form.contact_email.label_tag }}{{ form.contact_email }}{{ form.contact_email.errors }}<span class="help">Prefilled from your account. Change this if the Workshop uses a shared or different contact address.</span></div>
+      <div class="field">{{ form.timezone.label_tag }}{{ form.timezone }}{{ form.timezone.errors }}<span class="help">Used for Workshop-local dates and schedules.</span></div>
+    </div>
+    <footer class="card-actions"><span class="action-label">Step 1 of 3</span><div class="actions"><button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy" aria-hidden="true"></i>Create Workshop</button><span hidden data-submit-status role="status">Saving Workshop…</span></div></footer>
+  </form>
+</section>
 {% endblock %}

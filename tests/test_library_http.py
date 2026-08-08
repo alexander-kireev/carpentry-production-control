@@ -52,8 +52,7 @@ def test_mobile_dialog_close_retains_compact_accessible_touch_target():
     css = (settings.BASE_DIR / "static/css/foundation.css").read_text(
         encoding="utf-8", errors="strict"
     )
-    mobile = css.split("@media (max-width: 40rem)", 1)[1]
-    close_rule = re.search(r"\.library-dialog-close\s*\{([^}]*)\}", mobile)
+    close_rule = re.search(r"\.library-dialog-close\s*\{([^}]*)\}", css)
     assert close_rule is not None and "width: 2.75rem" in close_rule.group(1)
 
 
@@ -82,7 +81,9 @@ def _assert_submit_hook(form, message):
 
 def _assert_canonical_library_navigation(client, content):
     filter_form = re.search(
-        r'<form class="library-filters"[^>]*>', content, flags=re.DOTALL
+        r'<form class="[^"]*library-filters[^"]*"[^>]*>',
+        content,
+        flags=re.DOTALL,
     ).group(0)
     assert 'method="get"' in filter_form
     assert f'action="{reverse("workshops:libraries")}"' in filter_form
@@ -179,9 +180,9 @@ def test_pending_admin_get_has_accessible_catalogue_and_no_trailing_slash():
         )
     )
     assert 'aria-current="page">Roles</a>' in content
-    assert "Add from presets — unavailable" in content
+    assert "Add from presets · SC-04" in content
     assert 'disabled aria-disabled="true"' in content
-    assert '<dialog class="library-dialog"' in content
+    assert '<dialog class="library-dialog dialog"' in content
     _assert_canonical_library_navigation(client, content)
     assert not any(token in content for token in ("Ã", "Â", "â€"))
 
@@ -676,7 +677,7 @@ def test_operational_manager_is_read_only_and_has_no_internal_identifiers():
     client = Client()
     client.force_login(manager)
     content = client.get("/workshop/libraries").content.decode()
-    assert "Read-only catalogue" in content
+    assert "Read-only" in content
     assert (
         "library-add-button" not in content
         and "Add from presets — unavailable" not in content
@@ -887,7 +888,7 @@ def test_admin_edit_forms_cover_every_editable_field_and_preserve_errors_and_fil
     assert 'role="alert"' in body
     assert 'aria-current="page">Units</a>' in body
     assert 'name="family" value="unit_type"' in body
-    assert 'value="active" selected' in body
+    assert 'name="status" value="active"' in body
     assert 'name="q" type="search" value="Metres"' in body
     unit.refresh_from_db()
     assert (unit.name, unit.abbreviation, unit.version) == ("Metres", "m", 1)

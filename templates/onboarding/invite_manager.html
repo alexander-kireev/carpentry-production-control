@@ -2,6 +2,19 @@
 {% block title %}Invite manager | Carpentry Production Control{% endblock %}
 {% block content %}
 {% include "onboarding/_stage_nav.html" %}
-<header class="pagehead"><p class="eyebrow">Administrator onboarding</p><h1>Invite the permanent manager</h1><p>The manager activates the operational Workshop from a time-limited invitation.</p></header>
-<section class="surface-card"><div class="card-body">{% if generic_error %}<div class="alert alert-danger" role="alert">{{ generic_error }}</div>{% endif %}{% if form.errors %}<div class="alert alert-danger" role="alert">Nothing was sent. Correct the highlighted fields.</div>{% endif %}<form method="post" action="{% url 'onboarding-manager' %}" data-submit-once novalidate>{% csrf_token %}{{ form.as_div }}<div class="form-actions"><button type="submit"><i class="ti ti-send" aria-hidden="true"></i>Send invitation</button><span hidden data-submit-status role="status">Sending invitation…</span></div></form></div></section>
+<header class="pagehead"><div><p class="eyebrow">Permanent manager</p><h1>Invite the permanent manager</h1><p>The manager sets their own password from the invitation. Invitation source truth commits independently of email delivery.</p></div></header>
+<section class="card card-flush" aria-labelledby="manager-details-heading">
+  <header class="cardhead"><div><h2 id="manager-details-heading">Manager details</h2><p>{{ identity_user.workshop.name }} is saved.</p></div></header>
+  <form method="post" action="{% url 'onboarding-manager' %}" data-submit-once novalidate>{% csrf_token %}{{ form.submission_nonce }}{{ form.expected_workshop_version }}
+    <div class="cardbody form-grid">
+      {% if generic_error %}<div class="alert alert-danger field-wide" role="alert">{{ generic_error }}</div>{% endif %}
+      {% if form.errors %}<div class="alert alert-danger field-wide" role="alert">Nothing was sent. Correct the highlighted fields.</div>{% endif %}
+      <div class="field">{{ form.first_name.label_tag }}{{ form.first_name }}{{ form.first_name.errors }}</div>
+      <div class="field">{{ form.last_name.label_tag }}{{ form.last_name }}{{ form.last_name.errors }}</div>
+      <div class="field">{{ form.date_of_birth.label_tag }}{{ form.date_of_birth }}{{ form.date_of_birth.errors }}</div>
+      <div class="field">{{ form.email.label_tag }}{{ form.email }}{{ form.email.errors }}</div>
+    </div>
+    <footer class="card-actions"><span class="action-label">Step 2 of 3</span><div class="actions"><button type="submit" class="btn btn-primary"><i class="ti ti-send" aria-hidden="true"></i>Send invitation</button><span hidden data-submit-status role="status">Creating invitation…</span></div></footer>
+  </form>
+</section>
 {% endblock %}
