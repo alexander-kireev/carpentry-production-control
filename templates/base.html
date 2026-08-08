@@ -7,81 +7,33 @@
     <meta name="referrer" content="{% block referrer_policy %}same-origin{% endblock %}">
     <title>{% block title %}Carpentry Production Control{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'css/foundation.css' %}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
   </head>
   <body>
-    <main class="{% if identity_user %}onboarding-shell{% else %}public-shell{% endif %}">
-      <header class="shell-header">
-        <div class="brand" aria-label="Carpentry Production Control">CPC</div>
-        {% if identity_user %}
-          {% if identity_user.workshop.status == "operational" %}<nav class="role-nav" aria-label="Workshop">{% if identity_user.account_role != "operator" %}<a href="{% url 'workshops:libraries' %}">Libraries</a>{% endif %}<a href="{% url 'workshops:materials' %}">Materials</a></nav>{% endif %}
-          <div class="own-identity" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div>
-          <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="button-secondary">Log out</button></form>
-        {% endif %}
+    {% if identity_user and identity_user.workshop.status == "operational" %}
+    <header class="appbar">
+      <div class="appbar-in">
+        <a class="appbar-brand" href="{% url 'dashboard' %}"><strong>CPC</strong><span>{{ identity_user.workshop.name }}</span></a>
+        <nav class="appnav" aria-label="Primary navigation">
+          <a href="{% url 'dashboard' %}"{% if dashboard_section %} aria-current="page"{% endif %}>Dashboard</a>
+          <a href="{% if identity_user.account_role == 'operator' %}{% url 'workshops:materials' %}{% else %}{% url 'workshops:libraries' %}{% endif %}"{% if workshop_section %} aria-current="page"{% endif %}>Workshop</a>
+        </nav>
+        <div class="appbar-user" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div>
+        <form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="btn">Log out</button></form>
+      </div>
+    </header>
+    <main class="page operational-page">
+    {% else %}
+    <main class="{% if identity_user %}page-wide onboarding-shell{% else %}public-shell{% endif %}">
+      <header class="onboarding-appbar">
+        {% if identity_user %}<a class="appbar-brand" href="{% url 'onboarding-resolver' %}" aria-label="Carpentry Production Control home"><strong>CPC</strong></a>{% else %}<div class="appbar-brand" aria-label="Carpentry Production Control"><strong>CPC</strong></div>{% endif %}
+        {% if identity_user and identity_user.workshop %}<a class="appbar-context" href="{% url 'onboarding-workshop' %}">{{ identity_user.workshop.name }}</a>{% endif %}
+        {% if identity_user %}<div class="appbar-user" aria-label="Signed-in identity">{{ identity_user.first_name }} {{ identity_user.last_name }}</div><form class="logout-form" method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="btn">Log out</button></form>{% endif %}
       </header>
+    {% endif %}
+      {% include "includes/feedback.html" %}
       {% block content %}{% endblock %}
     </main>
-    <script>
-      document.querySelectorAll("form[data-submit-once]").forEach((form) => {
-        form.addEventListener("submit", (event) => {
-          if (form.dataset.submitted === "true") {
-            event.preventDefault();
-            return;
-          }
-          form.dataset.submitted = "true";
-          form.setAttribute("aria-busy", "true");
-          const button = form.querySelector('button[type="submit"]');
-          const status = form.querySelector("[data-submit-status]");
-          if (button) {
-            button.disabled = true;
-            button.setAttribute("aria-disabled", "true");
-          }
-          if (status) {
-            status.hidden = false;
-          }
-        });
-      });
-      document.querySelectorAll("[data-dialog-open]").forEach((opener) => {
-        opener.addEventListener("click", () => {
-          const dialog = document.getElementById(opener.dataset.dialogOpen);
-          if (dialog && typeof dialog.showModal === "function") {
-            dialog.dataset.returnFocus = opener.dataset.dialogOpen;
-            dialog.showModal();
-          }
-        });
-      });
-      document.querySelectorAll("dialog.library-dialog").forEach((dialog) => {
-        dialog.querySelectorAll("[data-dialog-close]").forEach((close) => {
-          close.addEventListener("click", () => dialog.close());
-        });
-        dialog.addEventListener("click", (event) => {
-          if (event.target === dialog) dialog.close();
-        });
-        dialog.addEventListener("close", () => {
-          const opener = document.querySelector(`[data-dialog-open="${dialog.id}"]`);
-          if (opener) opener.focus();
-        });
-      });
-      const dialogWithErrors = document.querySelector("dialog[data-dialog-auto-open]");
-      if (dialogWithErrors && typeof dialogWithErrors.showModal === "function") {
-        dialogWithErrors.showModal();
-        const invalidField = dialogWithErrors.querySelector('[aria-invalid="true"]');
-        if (invalidField) invalidField.focus();
-      }
-      document.querySelectorAll("form[data-material-dependencies]").forEach((form) => {
-        [["category_id", "category_version"], ["unit_id", "unit_version"]].forEach(([selectName, versionName]) => {
-          const select = form.elements.namedItem(selectName);
-          const version = form.elements.namedItem(versionName);
-          if (!select || !version) return;
-          const sync = () => {
-            const option = select.options[select.selectedIndex];
-            let versions = {};
-            try { versions = JSON.parse(select.dataset.versionMap || "{}"); } catch (_) { versions = {}; }
-            version.value = option ? versions[option.value] || version.value : version.value;
-          };
-          select.addEventListener("change", sync);
-          sync();
-        });
-      });
-    </script>
+    <script src="{% static 'js/foundation.js' %}" defer></script>
   </body>
 </html>

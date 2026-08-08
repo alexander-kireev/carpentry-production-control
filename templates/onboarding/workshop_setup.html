@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Workshop setup | Carpentry Production Control{% endblock %}
+{% block content %}
+{% include "onboarding/_stage_nav.html" with stage="setup" setup_available=True %}
+<header class="pagehead"><div><p class="eyebrow">Configuration workspace</p><h1>Workshop setup</h1><p>Configure the vocabulary and resources used by this Workshop. Each confirmed change is saved independently.</p></div></header>
+{% include "onboarding/_setup_tabs.html" with active="libraries" %}
+{% include "workshops/_libraries_catalogue.html" with can_mutate=True %}
+{% endblock %}

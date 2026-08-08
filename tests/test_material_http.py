@@ -1,5 +1,6 @@
 import re
 from html import unescape
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -21,7 +22,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 def _assert_filters_retained(content, *, query, status, category_id):
     assert re.search(rf'name="q"[^>]*value="{re.escape(query)}"', content)
-    assert re.search(rf'<option value="{status}"[^>]*selected', content)
+    assert f'name="status" value="{status}"' in content
     assert re.search(rf'<option value="{category_id}"[^>]*selected', content)
 
 
@@ -40,10 +41,10 @@ def test_pending_admin_page_is_accessible_and_preset_is_disabled():
     response = client.get(reverse("workshops:materials"))
     content = response.content.decode("utf-8")
     assert response.status_code == 200
-    assert "Return to setup status" in content
+    assert "Workshop setup areas" in content
     assert "Add material" in content
-    assert "Add from presets — unavailable" in content
-    assert re.search(r"<button[^>]*disabled[^>]*>Add from presets", content)
+    assert "Add from presets · SC-04" in content
+    assert re.search(r"<button[^>]*disabled[^>]*>.*Add from presets", content)
     assert "data-submit-once" in content
     assert 'role="status" aria-live="polite"' in content
     assert client.get("/workshop/materials/").status_code in {302, 404}
@@ -230,7 +231,8 @@ def test_success_invalid_stale_and_blocked_mutations_retain_filters():
             "unit_version": unit.version,
         },
     )
-    assert successful.status_code == 200
+    assert successful.status_code == 302
+    successful = client.get(successful.headers["Location"])
     _assert_filters_retained(
         successful.content.decode("utf-8"),
         query="Birch",
@@ -265,9 +267,15 @@ def test_success_invalid_stale_and_blocked_mutations_retain_filters():
         },
     )
     assert stale.status_code == 400
-    assert "This item changed" in stale.content.decode("utf-8")
+    stale_content = stale.content.decode("utf-8")
+    assert "This item changed" in stale_content
+    assert 'value="Standard"' in stale_content
+    stale_dialog = re.search(
+        rf'<dialog[^>]*id="edit-variant-{created.variant_id}"[^>]*>', stale_content
+    ).group(0)
+    assert "data-dialog-auto-open" in stale_dialog
     _assert_filters_retained(
-        stale.content.decode("utf-8"),
+        stale_content,
         query="Birch",
         status="active",
         category_id=category.id,
@@ -352,3 +360,43 @@ def test_cross_tenant_detail_is_non_disclosing():
         reverse("workshops:material-detail", args=(created.material_id,))
     )
     assert response.status_code == 404
+
+
+def test_material_post_result_permission_loss_uses_safe_fallback(client, monkeypatch):
+    actor, workshop, category, unit = material_dependencies("permission-loss")
+    created = create_material(
+        actor_id=actor.id,
+        workshop_id=workshop.id,
+        submission_key="create",
+        data=material_data(category, unit),
+    )
+    client.force_login(actor)
+    real_resolve = __import__(
+        "workshops.views", fromlist=["resolve_materials_access"]
+    ).resolve_materials_access
+    calls = 0
+
+    def access_then_loss(user):
+        nonlocal calls
+        calls += 1
+        return real_resolve(user) if calls == 1 else None
+
+    monkeypatch.setattr("workshops.views.resolve_materials_access", access_then_loss)
+    monkeypatch.setattr(
+        "workshops.views.edit_material",
+        lambda **kwargs: SimpleNamespace(code="stale"),
+    )
+    response = client.post(
+        reverse("workshops:material-edit", args=(created.material_id,)),
+        {
+            "submission_key": "387e2ccb-80ea-47b2-9804-85762a9f4e1b",
+            "version": 1,
+            "name": "Retained material",
+            "category_id": category.id,
+            "category_version": category.version,
+            "unit_id": unit.id,
+            "unit_version": unit.version,
+        },
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/onboarding/manager"

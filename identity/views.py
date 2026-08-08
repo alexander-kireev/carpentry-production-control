@@ -4,7 +4,9 @@ import secrets
 
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
+
+from foundation.feedback import pop_feedback, set_feedback
 
 from .commands import (
     accept_permanent_manager_invitation,
@@ -30,6 +32,7 @@ from .forms import (
 )
 from .models import UserInvitation
 from .queries import (
+    get_onboarding_page_access,
     get_pending_manager_setup,
     get_public_invitation_envelope,
     get_timezone_correction_hint,
@@ -46,6 +49,23 @@ GENERIC_LOGIN_ERROR = "The email address or password was not recognised."
 
 def _redirect_for(user):
     destination = resolve_authenticated_destination(user)
+    return HttpResponseRedirect(destination.destination.value)
+
+
+def _fail_closed_pending_session(request, *, operation):
+    end_session(request)
+    logger.error(
+        "Pending manager aggregate unavailable",
+        extra={"operation": operation, "result_code": "failed_closed"},
+    )
+    return redirect("login")
+
+
+def _pending_manager_redirect_or_fail(request, user, *, operation):
+    destination = resolve_authenticated_destination(user)
+    if destination.destination.value == "/onboarding/manager":
+        if get_pending_manager_setup(user) is None:
+            return _fail_closed_pending_session(request, operation=operation)
     return HttpResponseRedirect(destination.destination.value)
 
 
@@ -196,9 +216,47 @@ def _workshop_form(user, data=None):
 @require_http_methods(["GET", "POST"])
 def workshop_onboarding(request):
     resolution = resolve_authenticated_destination(request.user)
-    if not resolution.supported or resolution.destination.value != request.path:
+    access = get_onboarding_page_access(request.user)
+    creating = resolution.supported and resolution.destination.value == request.path
+    if not creating and access is None:
         return _redirect_for(request.user)
-    user = resolution.user
+    user = resolution.user if creating else access["actor"]
+    if not creating:
+        if request.method == "GET":
+            timezone_status = request.session.pop("timezone_status", None)
+            return render(
+                request,
+                "onboarding/workshop_details.html",
+                {
+                    "identity_user": user,
+                    "workshop": user.workshop,
+                    "timezone_hint": get_timezone_correction_hint(user),
+                    "timezone_form": _timezone_form(user),
+                    "timezone_status": timezone_status,
+                    "feedback": pop_feedback(request),
+                    "stage": "workshop",
+                    "setup_available": access["setup_available"],
+                },
+            )
+        if request.POST.get("timezone_action") != "correct":
+            return _redirect_for(user)
+        handled = _handle_timezone_post(request, user)
+        if not isinstance(handled, tuple):
+            return handled
+        _, timezone_context, status = handled
+        return render(
+            request,
+            "onboarding/workshop_details.html",
+            {
+                "identity_user": user,
+                "workshop": user.workshop,
+                "stage": "workshop",
+                "setup_available": access["setup_available"],
+                "open_timezone_dialog": True,
+                **timezone_context,
+            },
+            status=status,
+        )
     if request.method == "GET":
         return render(
             request,
@@ -212,7 +270,9 @@ def workshop_onboarding(request):
         actor_id=user.id, data=request.POST, idempotency_key=receipt_key
     )
     if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
-        request.session["workshop_saved"] = True
+        set_feedback(
+            request, title="Workshop saved", body="Workshop details were committed."
+        )
         return redirect("onboarding-manager")
     if result.code == ResultCode.ALREADY_ADVANCED:
         return _redirect_for(user)
@@ -296,7 +356,9 @@ def _replacement_form(workshop_version, data=None):
     )
 
 
-def _cockpit_context(user, setup, *, replacement_data=None, status_message=None):
+def _manager_pending_context(
+    user, setup, *, replacement_data=None, status_message=None
+):
     return {
         "identity_user": user,
         "setup": setup,
@@ -305,7 +367,8 @@ def _cockpit_context(user, setup, *, replacement_data=None, status_message=None)
             setup["workshop_version"], replacement_data
         ),
         "invitation_status": status_message,
-        **_timezone_context(user),
+        "stage": "manager",
+        "setup_available": True,
     }
 
 
@@ -316,47 +379,113 @@ def _handle_timezone_post(request, user):
         actor_id=user.id, data=request.POST, idempotency_key=command_key
     )
     if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
-        request.session["timezone_status"] = "Workshop timezone corrected."
+        set_feedback(
+            request,
+            title="Timezone corrected",
+            body="The Workshop timezone was updated.",
+        )
         return redirect(request.path)
     if result.code == ResultCode.VALIDATION_ERROR:
         return None, _timezone_context(user, request.POST), 400
-    messages = {
-        ResultCode.STALE: "Workshop setup changed. Review the current timezone.",
-        ResultCode.ALREADY_ADVANCED: "Timezone correction is no longer available.",
-    }
-    request.session["timezone_status"] = messages.get(
-        result.code, "Timezone correction is unavailable."
+    if result.code == ResultCode.ALREADY_ADVANCED:
+        request.session["timezone_status"] = (
+            "Timezone correction is closed. The current Workshop timezone is shown."
+        )
+        return redirect(request.path)
+    message = (
+        "Workshop setup changed. Review the current timezone and try again."
+        if result.code == ResultCode.STALE
+        else "Timezone correction is unavailable. Review the current timezone."
     )
-    return redirect(request.path)
+    return None, _timezone_context(user, request.POST, message), 400
 
 
 @require_http_methods(["GET", "POST"])
 def onboarding_manager(request):
-    resolution = resolve_authenticated_destination(request.user)
-    if not resolution.supported or resolution.destination.value != request.path:
+    access = get_onboarding_page_access(request.user)
+    if access is None:
         return _redirect_for(request.user)
-    user = resolution.user
-    if request.method == "POST" and request.POST.get("timezone_action") == "correct":
-        handled = _handle_timezone_post(request, user)
-        if not isinstance(handled, tuple):
-            return handled
-        _, timezone_context, status = handled
-        context = {
-            "identity_user": user,
-            "form": _manager_form(user),
-            **timezone_context,
-        }
-        return render(request, "onboarding/invite_manager.html", context, status=status)
+    user = access["actor"]
+    pending = user.workshop.status == "manager_activation_pending"
+    if pending:
+        setup = get_pending_manager_setup(user)
+        if setup is None:
+            return _fail_closed_pending_session(
+                request, operation="identity.manager.pending.read"
+            )
+        if request.method == "GET":
+            context = _manager_pending_context(user, setup)
+            context["feedback"] = pop_feedback(request)
+            return render(
+                request, "onboarding/manager_activation_pending.html", context
+            )
+        action = request.POST.get("invitation_action")
+        if action not in {"resend", "replace"}:
+            return redirect("onboarding-manager")
+        nonce = request.POST.get("submission_nonce", "")
+        key = hashlib.sha256(nonce.encode()).hexdigest() if nonce else ""
+        command = (
+            resend_permanent_manager_invitation
+            if action == "resend"
+            else replace_pending_permanent_manager
+        )
+        result = command(actor_id=user.id, data=request.POST, idempotency_key=key)
+        if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
+            set_feedback(
+                request,
+                title="Invitation updated",
+                body=(
+                    "A fresh invitation was committed."
+                    if action == "resend"
+                    else "The pending manager was replaced and invited."
+                ),
+            )
+            return redirect("onboarding-manager")
+        if result.code == ResultCode.ALREADY_ADVANCED:
+            return _pending_manager_redirect_or_fail(
+                request, user, operation="identity.manager.pending.post"
+            )
+        setup = get_pending_manager_setup(user)
+        if setup is None:
+            return _fail_closed_pending_session(
+                request, operation="identity.manager.pending.post_result"
+            )
+        context = _manager_pending_context(
+            user, setup, replacement_data=request.POST if action == "replace" else None
+        )
+        context["invitation_status"] = (
+            (
+                "The resend request was invalid. Review the current invitation "
+                "and try again."
+                if action == "resend"
+                else None
+            )
+            if result.code == ResultCode.VALIDATION_ERROR
+            else (
+                "Workshop setup changed. Review the current invitation."
+                if result.code == ResultCode.STALE
+                else "The recovery request is unavailable."
+            )
+        )
+        context["open_dialog"] = action
+        if result.code == ResultCode.VALIDATION_ERROR and action == "replace":
+            context["replacement_form"] = _replacement_form(
+                setup["workshop_version"], request.POST
+            )
+            context["replacement_form"].is_valid()
+        return render(
+            request, "onboarding/manager_activation_pending.html", context, status=400
+        )
     if request.method == "GET":
-        timezone_status = request.session.pop("timezone_status", None)
         return render(
             request,
             "onboarding/invite_manager.html",
             {
                 "identity_user": user,
                 "form": _manager_form(user),
-                "workshop_saved": bool(request.session.pop("workshop_saved", False)),
-                **_timezone_context(user, status_message=timezone_status),
+                "feedback": pop_feedback(request),
+                "stage": "manager",
+                "setup_available": False,
             },
         )
     nonce = request.POST.get("submission_nonce", "")
@@ -365,7 +494,12 @@ def onboarding_manager(request):
         actor_id=user.id, data=request.POST, idempotency_key=receipt_key
     )
     if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
-        return redirect("onboarding-cockpit")
+        set_feedback(
+            request,
+            title="Invitation sent",
+            body="The permanent manager invitation was committed.",
+        )
+        return redirect("onboarding-manager")
     if result.code == ResultCode.ALREADY_ADVANCED:
         return _redirect_for(user)
     if result.code == ResultCode.VALIDATION_ERROR:
@@ -388,98 +522,26 @@ def onboarding_manager(request):
             "identity_user": user,
             "form": form,
             "generic_error": generic_error,
-            **_timezone_context(user),
+            "stage": "manager",
+            "setup_available": False,
         },
         status=status,
     )
 
 
-@require_http_methods(["GET", "POST"])
-def onboarding_cockpit(request):
-    resolution = resolve_authenticated_destination(request.user)
-    if not resolution.supported or resolution.destination.value != request.path:
+@require_GET
+def onboarding_resolver(request):
+    return _redirect_for(request.user)
+
+
+@require_GET
+def onboarding_setup(request):
+    access = get_onboarding_page_access(request.user)
+    if access is None or not access["setup_available"]:
         return _redirect_for(request.user)
-    setup = get_pending_manager_setup(resolution.user)
-    if setup is None:
-        logger.error(
-            "Pending manager projection unavailable",
-            extra={
-                "operation": "identity.manager.pending.read",
-                "result_code": "failed",
-                "workshop_id": resolution.user.workshop_id,
-            },
-        )
-        return redirect("login")
-    if request.method == "POST":
-        if request.POST.get("timezone_action") == "correct":
-            handled = _handle_timezone_post(request, resolution.user)
-            if not isinstance(handled, tuple):
-                return handled
-            _, timezone_context, status = handled
-            context = _cockpit_context(resolution.user, setup)
-            context.update(timezone_context)
-            return render(
-                request,
-                "onboarding/setup_cockpit.html",
-                context,
-                status=status,
-            )
-        action = request.POST.get("invitation_action")
-        if action not in {"resend", "replace"}:
-            return redirect(request.path)
-        nonce = request.POST.get("submission_nonce", "")
-        command_key = hashlib.sha256(nonce.encode()).hexdigest() if nonce else ""
-        if action == "resend":
-            result = resend_permanent_manager_invitation(
-                actor_id=resolution.user.id,
-                data=request.POST,
-                idempotency_key=command_key,
-            )
-        else:
-            result = replace_pending_permanent_manager(
-                actor_id=resolution.user.id,
-                data=request.POST,
-                idempotency_key=command_key,
-            )
-        if result.code in {ResultCode.SUCCESS, ResultCode.REPLAY}:
-            if action == "resend":
-                request.session["invitation_status"] = (
-                    "A fresh invitation was committed. The previous link is now "
-                    "unavailable."
-                )
-            else:
-                request.session["invitation_status"] = (
-                    "The pending manager was replaced and a fresh invitation was "
-                    "committed."
-                )
-            return redirect(request.path)
-        if result.code == ResultCode.ALREADY_ADVANCED:
-            return _redirect_for(resolution.user)
-        if result.code == ResultCode.VALIDATION_ERROR and action == "replace":
-            form = _replacement_form(setup["workshop_version"], request.POST)
-            form.is_valid()
-            context = _cockpit_context(
-                resolution.user, setup, replacement_data=request.POST
-            )
-            context["replacement_form"] = form
-            return render(request, "onboarding/setup_cockpit.html", context, status=400)
-        messages = {
-            ResultCode.STALE: "Workshop setup changed. Review the current invitation.",
-            ResultCode.VALIDATION_ERROR: "The recovery request was invalid.",
-        }
-        request.session["invitation_status"] = messages.get(
-            result.code, "Invitation recovery is currently unavailable."
-        )
-        return redirect(request.path)
-    timezone_status = request.session.pop("timezone_status", None)
-    invitation_status = request.session.pop("invitation_status", None)
-    context = _cockpit_context(resolution.user, setup, status_message=invitation_status)
-    context["timezone_status"] = timezone_status
-    return render(
-        request,
-        "onboarding/setup_cockpit.html",
-        context,
-    )
+    from workshops.views import render_onboarding_setup
+
+    return render_onboarding_setup(request)
 
 
 def holding(request):
@@ -505,5 +567,6 @@ def dashboard(request):
             "stage": "operational",
             "role_home": resolution.role_home,
             "libraries_available": resolution.role_home in {"admin", "manager"},
+            "dashboard_section": True,
         },
     )

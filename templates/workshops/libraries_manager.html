@@ -1,12 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Libraries | Carpentry Production Control{% endblock %}
 {% block content %}
-<section class="library-shell" aria-labelledby="libraries-title">
-  <header class="library-pagehead">
-    <div><p class="eyebrow">Workshop configuration</p><h1 id="libraries-title">Libraries</h1>
-    <p class="library-purpose">Read-only catalogue of the reusable configuration used across {{ workshop_name }}, including active, retired, protected and system rows.</p></div>
-    <span class="library-context">Read-only</span>
-  </header>
-  {% include "workshops/_library_family.html" with can_mutate=False %}
-</section>
+{% include "workshops/_workshop_nav.html" %}
+{% include "workshops/_libraries_catalogue.html" with can_mutate=False %}
 {% endblock %}

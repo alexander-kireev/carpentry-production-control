@@ -1,25 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Invite manager | Carpentry Production Control{% endblock %}
 {% block content %}
-<nav class="setup-steps" aria-label="Workshop setup progress">
-  <span>1 · Workshop</span><span aria-current="step">2 · Manager</span><span>3 · Setup status</span>
-</nav>
-<section class="onboarding-card" aria-labelledby="manager-title">
-  <p class="eyebrow">Workshop setup</p>
-  <h1 id="manager-title">Invite your permanent manager</h1>
-  <p>{{ identity_user.workshop.name }} is ready for its permanent manager.</p>
-  {% if workshop_saved %}<div class="success-status" role="status">Workshop saved</div>{% endif %}
-  {% if generic_error %}<div class="form-status" role="alert" aria-live="polite">{{ generic_error }}</div>{% elif form.non_field_errors %}<div class="form-status" role="alert" aria-live="polite">{{ form.non_field_errors }}</div>{% endif %}
-  <form method="post" novalidate data-submit-once>
-    {% csrf_token %}{{ form.submission_nonce }}{{ form.expected_workshop_version }}
-    <div class="form-grid">
-      <div class="field"><label for="id_first_name">First name</label>{{ form.first_name }}{{ form.first_name.errors }}</div>
-      <div class="field"><label for="id_last_name">Last name</label>{{ form.last_name }}{{ form.last_name.errors }}</div>
-      <div class="field"><label for="id_date_of_birth">Date of birth</label>{{ form.date_of_birth }}{{ form.date_of_birth.errors }}</div>
-      <div class="field"><label for="id_email">Email</label>{{ form.email }}{{ form.email.errors }}</div>
+{% include "onboarding/_stage_nav.html" %}
+<header class="pagehead"><div><p class="eyebrow">Permanent manager</p><h1>Invite the permanent manager</h1><p>The manager sets their own password from the invitation. Invitation source truth commits independently of email delivery.</p></div></header>
+<section class="card card-flush" aria-labelledby="manager-details-heading">
+  <header class="cardhead"><div><h2 id="manager-details-heading">Manager details</h2><p>{{ identity_user.workshop.name }} is saved.</p></div></header>
+  <form method="post" action="{% url 'onboarding-manager' %}" data-submit-once novalidate>{% csrf_token %}{{ form.submission_nonce }}{{ form.expected_workshop_version }}
+    <div class="cardbody form-grid">
+      {% if generic_error %}<div class="alert alert-danger field-wide" role="alert">{{ generic_error }}</div>{% endif %}
+      {% if form.errors %}<div class="alert alert-danger field-wide" role="alert">Nothing was sent. Correct the highlighted fields.</div>{% endif %}
+      <div class="field">{{ form.first_name.label_tag }}{{ form.first_name }}{{ form.first_name.errors }}</div>
+      <div class="field">{{ form.last_name.label_tag }}{{ form.last_name }}{{ form.last_name.errors }}</div>
+      <div class="field">{{ form.date_of_birth.label_tag }}{{ form.date_of_birth }}{{ form.date_of_birth.errors }}</div>
+      <div class="field">{{ form.email.label_tag }}{{ form.email }}{{ form.email.errors }}</div>
     </div>
-    <button type="submit">Send invitation</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Saving invitation…</span>
+    <footer class="card-actions"><span class="action-label">Step 2 of 3</span><div class="actions"><button type="submit" class="btn btn-primary"><i class="ti ti-send" aria-hidden="true"></i>Send invitation</button><span hidden data-submit-status role="status">Creating invitation…</span></div></footer>
   </form>
 </section>
-{% include "onboarding/_timezone_correction.html" %}
 {% endblock %}

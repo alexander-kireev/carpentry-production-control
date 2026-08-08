@@ -1,3 +1,19 @@
 {% extends "base.html" %}
 {% block title %}{{ material.name }} | Materials{% endblock %}
-{% block content %}<section class="library-shell"><a class="library-back-link" href="{% url 'workshops:materials' %}">← Materials</a><header class="library-pagehead"><div><p class="eyebrow">Material</p><h1>{{ material.name }}</h1><p>{{ material.category }} · {{ material.unit }} ({{ material.unit_abbreviation }})</p></div><span class="library-status-chip status-{{ material.status }}">{{ material.status|title }}</span></header><h2>Variants</h2>{% if material.variants %}<ul class="detail-list">{% for variant in material.variants %}<li>{{ variant.label }} — {{ variant.status|title }}{% if not pending_setup %}, current stock {{ variant.current_stock }}{% endif %}</li>{% endfor %}</ul>{% else %}<p>No Variants have been added.</p>{% endif %}</section>{% endblock %}
+{% block content %}
+{% if pending_setup %}
+  {% include "onboarding/_stage_nav.html" with stage="setup" setup_available=True %}
+  {% include "onboarding/_setup_tabs.html" with active="materials" %}
+{% else %}
+  {% include "workshops/_workshop_nav.html" with active="materials" %}
+{% endif %}
+<a class="library-back-link" href="{% url 'workshops:materials' %}">← Materials</a>
+<header class="pagehead content-pagehead">
+  <div><p class="eyebrow">Material</p><h1>{{ material.name }}</h1><p>{{ material.category }} · {{ material.unit }} ({{ material.unit_abbreviation }})</p></div>
+  <span class="chip status-{{ material.status }}">{{ material.status|title }}</span>
+</header>
+<section class="card card-flush">
+  <header class="cardhead"><div><h2>Variants</h2><p>Stock-tracked forms of this material.</p></div><span class="chip chip-neutral">{{ material.variants|length }} variant{{ material.variants|length|pluralize }}</span></header>
+  {% if material.variants %}<ul class="detail-list cardbody">{% for variant in material.variants %}<li>{{ variant.label }} — {{ variant.status|title }}{% if not pending_setup %}, current stock {{ variant.current_stock }}{% endif %}</li>{% endfor %}</ul>{% else %}<div class="empty-state"><h3>No variants</h3><p>No Variants have been added.</p></div>{% endif %}
+</section>
+{% endblock %}

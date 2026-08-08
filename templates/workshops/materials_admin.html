@@ -1,15 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Materials | Carpentry Production Control{% endblock %}
 {% block content %}
-<section class="library-shell materials-shell" aria-labelledby="materials-title">
-  {% if pending_setup %}<a class="library-back-link" href="{% url 'onboarding-cockpit' %}">← Return to setup status</a>{% endif %}
-  <header class="library-pagehead"><div><p class="eyebrow">Workshop catalogue</p><h1 id="materials-title">Materials</h1><p class="library-purpose">Define materials and stocked Variants used by {{ workshop_name }}. Every custom Variant records an immutable opening balance, including zero.</p></div><button type="button" class="library-add-button" data-dialog-open="create-material">Add material</button></header>
-  <p class="library-result status-{{ result|default:'idle' }}" role="status" aria-live="polite">{% if result == "committed" %}Change committed.{% elif result == "recovered" %}The previously committed result was recovered; nothing was duplicated.{% elif result == "stale" %}This item changed. Refresh before trying again.{% elif result == "blocked" %}A current dependency blocks that change. Nothing was saved.{% elif result %}This action is unavailable. Nothing was changed.{% else %}Ready for material catalogue changes.{% endif %}</p>
-  <div class="materials-toolbar">
-    <form class="library-filters" method="get" role="search"><div><label for="materials-search">Search materials</label><input id="materials-search" name="q" type="search" value="{{ filters.q }}"></div><div><label for="materials-status">Status</label><select id="materials-status" name="status"><option value="">All</option><option value="active"{% if filters.status == 'active' %} selected{% endif %}>Active</option><option value="archived"{% if filters.status == 'archived' %} selected{% endif %}>Retired</option></select></div><div><label for="materials-category">Category</label><select id="materials-category" name="category"><option value="">All categories</option>{% for category in categories %}<option value="{{ category.id }}"{% if filters.category == category.id %} selected{% endif %}>{{ category.label }}</option>{% endfor %}</select></div><button type="submit">Apply filters</button></form>
-    <aside class="library-preset-preview" aria-label="Preset availability"><div><p class="eyebrow">Coming in SC-04</p><h2>Add from presets</h2><p>Preset browsing and application will be available in a later setup step.</p></div><button type="button" disabled aria-disabled="true">Add from presets — unavailable</button></aside>
-  </div>
-  <dialog class="library-dialog" id="create-material" aria-labelledby="create-material-title"{% if open_dialog == 'create-material' %} data-dialog-auto-open{% endif %}><div class="library-form-panel"><button type="button" class="library-dialog-close" data-dialog-close aria-label="Close create Material form">×</button><h2 id="create-material-title">Add material</h2><p>Add a bare Material, or complete every first-Variant field to create its opening balance atomically.</p>{% if material_form.errors %}<div class="form-status" role="alert">Nothing was saved. Correct the highlighted fields.</div>{% endif %}<form method="post" action="{% url 'workshops:material-create' %}?q={{ filters.q|urlencode }}&status={{ filters.status|urlencode }}&category={{ filters.category|urlencode }}" data-submit-once data-material-dependencies novalidate>{% csrf_token %}{{ material_form.as_div }}<button type="submit">Save material</button><span class="submit-status" role="status" aria-live="polite" data-submit-status hidden>Creating material…</span></form></div></dialog>
-  {% include "workshops/_material_rows.html" with can_mutate=True %}
-</section>
+{% if pending_setup %}
+  {% include "onboarding/_stage_nav.html" with stage="setup" setup_available=True %}
+  <header class="pagehead"><div><p class="eyebrow">Configuration workspace</p><h1>Workshop setup</h1><p>Configure the vocabulary and resources used by this Workshop. Each confirmed change is saved independently.</p></div></header>
+  {% include "onboarding/_setup_tabs.html" with active="materials" %}
+{% else %}
+  {% include "workshops/_workshop_nav.html" %}
+{% endif %}
+{% include "workshops/_materials_catalogue.html" with can_mutate=True %}
 {% endblock %}

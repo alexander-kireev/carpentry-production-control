@@ -1,0 +1,5 @@
+<nav class="stage-nav" aria-label="Workshop onboarding">
+  <a href="{% url 'onboarding-workshop' %}"{% if stage == "workshop" %} aria-current="page"{% endif %}><span class="stage-number">{% if stage != "workshop" %}<i class="ti ti-check" aria-hidden="true"></i>{% else %}1{% endif %}</span>Workshop</a>
+  {% if identity_user.workshop %}<a href="{% url 'onboarding-manager' %}"{% if stage == "manager" %} aria-current="page"{% endif %}><span class="stage-number">2</span>Manager</a>{% else %}<span aria-disabled="true"><span class="stage-number">2</span>Manager</span>{% endif %}
+  {% if setup_available %}<a href="{% url 'onboarding-setup' %}"{% if stage == "setup" %} aria-current="page"{% endif %}><span class="stage-number">3</span>Workshop setup</a>{% else %}<span aria-disabled="true"><span class="stage-number">3</span>Workshop setup</span>{% endif %}
+</nav>

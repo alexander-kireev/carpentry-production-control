@@ -1,0 +1,8 @@
+<div class="toast-region" role="status" aria-live="polite" aria-atomic="true">
+{% if feedback %}
+  <section class="toast toast-{{ feedback.kind }}" data-toast tabindex="-1">
+    <div><strong>{{ feedback.title }}</strong><p>{{ feedback.body }}</p></div>
+    <button type="button" class="icon-button" data-toast-close aria-label="Dismiss notification">×</button>
+  </section>
+{% endif %}
+</div>

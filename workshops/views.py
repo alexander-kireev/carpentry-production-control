@@ -7,6 +7,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
+from foundation.feedback import pop_feedback, set_feedback
 from identity.queries import resolve_authenticated_destination
 
 from .commands import (
@@ -108,7 +109,12 @@ def _render(
     status_code=200,
     bound_edit=None,
     selected_family=None,
+    template_name=None,
 ):
+    fresh_access = resolve_libraries_access(request.user)
+    if fresh_access is None or fresh_access.mode != access.mode:
+        return _denied(request)
+    access = fresh_access
     if selected_family not in FAMILY_LABELS:
         selected_family = request.GET.get("family")
     if selected_family not in FAMILY_LABELS:
@@ -119,28 +125,36 @@ def _render(
         status=request.GET.get("status"),
         search=request.GET.get("q", ""),
     )
+    if catalogue is None:
+        return _denied(request)
     if catalogue is not None and access.mode == "admin":
         for family in catalogue["families"]:
             for row in family["rows"]:
                 if row["can_edit"]:
                     if bound_edit and bound_edit[:2] == (family["key"], row["id"]):
                         row["edit_form"] = bound_edit[2]
+                        row["auto_open_edit"] = True
                     else:
                         row["edit_form"] = _edit_form(
                             access.workshop.id, family["key"], row["id"]
                         )
+                        row["auto_open_edit"] = False
     render_forms = forms or _forms(access.workshop.id)
     context = {
         **catalogue,
         "identity_user": access.actor,
+        "workshop_section": True,
+        "workshop_area": "libraries",
+        "can_view_libraries": True,
         "family_labels": FAMILY_LABELS,
         "forms": render_forms,
         "auto_open_create": next(
             (family for family, form in render_forms.items() if form.errors), None
         ),
         "result": result,
+        "feedback": pop_feedback(request),
     }
-    template = (
+    template = template_name or (
         "workshops/libraries_admin.html"
         if access.mode == "admin"
         else "workshops/libraries_manager.html"
@@ -157,6 +171,22 @@ def libraries(request):
     return _render(request, access, result=result)
 
 
+def render_onboarding_setup(request):
+    access = resolve_libraries_access(request.user)
+    if (
+        access is None
+        or access.mode != "admin"
+        or access.workshop.status != "manager_activation_pending"
+    ):
+        return _denied(request)
+    return _render(
+        request,
+        access,
+        result=request.session.pop("library_feedback", None),
+        template_name="onboarding/workshop_setup.html",
+    )
+
+
 def _library_get_url(request, family):
     query = urlencode(
         {
@@ -169,7 +199,15 @@ def _library_get_url(request, family):
 
 
 def _library_success_redirect(request, family, result_code):
-    request.session["library_feedback"] = result_code
+    set_feedback(
+        request,
+        title="Change committed." if result_code == "success" else "Change recovered.",
+        body=(
+            "Workshop library truth has been refreshed."
+            if result_code == "success"
+            else "The previously committed result was recovered."
+        ),
+    )
     return redirect(_library_get_url(request, family))
 
 
@@ -269,7 +307,14 @@ def library_edit(request, family, item_id):
     )
     if result.code in {"success", "replay"}:
         return _library_success_redirect(request, family, result.code)
-    return _render(request, access, result=result.code, selected_family=family)
+    return _render(
+        request,
+        access,
+        result=result.code,
+        status_code=400 if result.code == "validation_error" else 200,
+        bound_edit=(family, item_id, form) if result.code == "stale" else None,
+        selected_family=family,
+    )
 
 
 @require_POST
@@ -373,17 +418,27 @@ def _decorate_material_forms(catalogue, *, bound=None, data=None):
 def _render_materials(
     request, access, *, result=None, bound=None, data=None, status=200
 ):
+    fresh_access = resolve_materials_access(request.user)
+    if fresh_access is None or fresh_access.mode != access.mode:
+        return _denied(request)
+    access = fresh_access
     catalogue = get_materials_catalogue(
         access.actor,
         search=request.GET.get("q", ""),
         status=request.GET.get("status"),
         category_id=request.GET.get("category"),
     )
+    if catalogue is None:
+        return _denied(request)
     _decorate_material_forms(catalogue, bound=bound, data=data)
     context = {
         **catalogue,
         "identity_user": access.actor,
+        "workshop_section": True,
+        "workshop_area": "materials",
+        "can_view_libraries": access.mode in {"admin", "manager"},
         "result": result,
+        "feedback": pop_feedback(request),
         "material_form": _material_forms(catalogue, bound=bound, data=data)
         if catalogue["mode"] == "admin"
         else None,
@@ -405,6 +460,37 @@ def materials(request):
     return _render_materials(request, access)
 
 
+def _material_get_url(request):
+    query = urlencode(
+        {
+            "q": request.GET.get("q", ""),
+            "status": request.GET.get("status", ""),
+            "category": request.GET.get("category", ""),
+        }
+    )
+    return f"{reverse('workshops:materials')}?{query}"
+
+
+def _material_result_response(request, access, result, *, bound=None, data=None):
+    if result.code in {"committed", "recovered"}:
+        set_feedback(
+            request,
+            title="Change committed"
+            if result.code == "committed"
+            else "Change recovered",
+            body="The material catalogue has been refreshed.",
+        )
+        return redirect(_material_get_url(request))
+    return _render_materials(
+        request,
+        access,
+        result=result.code,
+        bound=bound,
+        data=data,
+        status=_material_result_status(result),
+    )
+
+
 @require_GET
 def material_detail(request, material_id):
     access = resolve_materials_access(request.user)
@@ -416,7 +502,13 @@ def material_detail(request, material_id):
     return render(
         request,
         "workshops/material_detail.html",
-        {**projection, "identity_user": access.actor},
+        {
+            **projection,
+            "identity_user": access.actor,
+            "workshop_section": True,
+            "workshop_area": "materials",
+            "can_view_libraries": access.mode in {"admin", "manager"},
+        },
     )
 
 
@@ -431,7 +523,13 @@ def material_variant_detail(request, variant_id):
     return render(
         request,
         "workshops/material_variant_detail.html",
-        {**projection, "identity_user": access.actor},
+        {
+            **projection,
+            "identity_user": access.actor,
+            "workshop_section": True,
+            "workshop_area": "materials",
+            "can_view_libraries": access.mode in {"admin", "manager"},
+        },
     )
 
 
@@ -467,9 +565,7 @@ def material_create(request):
         submission_key=key,
         data=data,
     )
-    return _render_materials(
-        request, access, result=result.code, status=_material_result_status(result)
-    )
+    return _material_result_response(request, access, result)
 
 
 @require_POST
@@ -503,8 +599,12 @@ def material_edit(request, material_id):
         idempotency_key=key,
         data=data,
     )
-    return _render_materials(
-        request, access, result=result.code, status=_material_result_status(result)
+    return _material_result_response(
+        request,
+        access,
+        result,
+        bound=f"edit-material-{material_id}",
+        data=request.POST,
     )
 
 
@@ -524,9 +624,7 @@ def material_transition(request, material_id, action):
         idempotency_key=str(form.cleaned_data["submission_key"]),
         action="archive" if action == "retire" else "restore",
     )
-    return _render_materials(
-        request, access, result=result.code, status=_material_result_status(result)
-    )
+    return _material_result_response(request, access, result)
 
 
 @require_POST
@@ -553,9 +651,7 @@ def material_variant_create(request, material_id):
         submission_key=key,
         data=data,
     )
-    return _render_materials(
-        request, access, result=result.code, status=_material_result_status(result)
-    )
+    return _material_result_response(request, access, result)
 
 
 @require_POST
@@ -583,8 +679,12 @@ def material_variant_edit(request, variant_id):
         idempotency_key=key,
         data=data,
     )
-    return _render_materials(
-        request, access, result=result.code, status=_material_result_status(result)
+    return _material_result_response(
+        request,
+        access,
+        result,
+        bound=f"edit-variant-{variant_id}",
+        data=request.POST,
     )
 
 
@@ -604,6 +704,4 @@ def material_variant_transition(request, variant_id, action):
         idempotency_key=str(form.cleaned_data["submission_key"]),
         action="archive" if action == "retire" else "restore",
     )
-    return _render_materials(
-        request, access, result=result.code, status=_material_result_status(result)
-    )
+    return _material_result_response(request, access, result)

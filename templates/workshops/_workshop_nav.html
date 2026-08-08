@@ -1,0 +1,8 @@
+<header class="workshop-pagehead">
+  <div><p class="eyebrow">Workshop</p><h1>Workshop</h1><p>{{ workshop_name }} · {{ workshop_area|capfirst }}</p></div>
+</header>
+<nav class="workshop-subnav" aria-label="Workshop sections">
+  {% if can_view_libraries %}<a href="{% url 'workshops:libraries' %}"{% if workshop_area == "libraries" %} aria-current="page"{% endif %}>Libraries</a>{% endif %}
+  <a href="{% url 'workshops:materials' %}"{% if workshop_area == "materials" %} aria-current="page"{% endif %}>Materials</a>
+  <span aria-disabled="true">Stations <span class="sr-only">unavailable until SC-03</span></span>
+</nav>

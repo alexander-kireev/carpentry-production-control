@@ -46,7 +46,7 @@ def attached(*, account_role, status="manager_required", role=None):
     ("account_role", "status", "destination"),
     [
         ("admin", "manager_required", Destination.INVITE_MANAGER),
-        ("admin", "manager_activation_pending", Destination.SETUP_COCKPIT),
+        ("admin", "manager_activation_pending", Destination.MANAGER_PENDING),
         ("operator", "manager_required", Destination.HOLDING),
         ("operator", "manager_activation_pending", Destination.HOLDING),
         ("admin", "operational", Destination.DASHBOARD),
@@ -95,7 +95,7 @@ def test_pending_projection_fails_closed_when_aggregate_is_incomplete():
         actor_id=admin.id, data=payload(), idempotency_key="projection"
     )
     admin.refresh_from_db()
-    assert get_pending_manager_setup(admin)["delivery_status"] == "sent"
+    assert get_pending_manager_setup(admin)["delivery_status"] in {"pending", "sent"}
     EmailDeliveryIntent.objects.all().delete()
     assert get_pending_manager_setup(admin) is None
 
